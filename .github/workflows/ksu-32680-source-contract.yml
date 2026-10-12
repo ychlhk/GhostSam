@@ -1,0 +1,61 @@
+name: KernelSU 32601 to 32680 source contract audit (READ ONLY)
+
+on:
+  push:
+    branches: [ksu-32680-compat]
+    paths:
+      - '.github/workflows/ksu-32680-source-contract.yml'
+      - 'scripts/ksu-32680-source-contract.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit-source-contract:
+    name: Compare loader, UAPI, Samsung init and SELinux contracts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout GhostSam review scripts
+        uses: actions/checkout@v4
+        with:
+          path: control
+          persist-credentials: false
+
+      - name: Checkout official 32680 source (full history required)
+        uses: actions/checkout@v4
+        with:
+          repository: tiann/KernelSU
+          ref: 0c0fdb960178fa12d80d6cbcfdcb6ad8be6a865d
+          fetch-depth: 0
+          path: ksu
+          persist-credentials: false
+
+      - name: Rebuild ephemeral merged tree without installation or executable artifacts
+        working-directory: ksu
+        shell: bash
+        env:
+          KSU_AUDIT_DIR: ${{ github.workspace }}/contract-audit
+        run: |
+          set -euo pipefail
+          bash ../control/scripts/ksu-32680-experimental-merge.sh
+          python3 ../control/scripts/ksu-32680-resolve-probe.py
+
+      - name: Audit source contract using exact pinned revisions
+        working-directory: ksu
+        shell: bash
+        env:
+          KSU_AUDIT_DIR: ${{ github.workspace }}/contract-audit
+        run: |
+          set -euo pipefail
+          python3 ../control/scripts/ksu-32680-source-contract.py
+
+      - name: Publish text-only source audit (no kernel or daemon binaries)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ksu-32680-vs-32601-source-contract-TEXT-ONLY
+          path: contract-audit/
+          if-no-files-found: warn
+          retention-days: 14
