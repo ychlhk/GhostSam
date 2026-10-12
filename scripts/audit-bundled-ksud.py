@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import lzma
+import zlib
 from pathlib import Path
 import re
 import struct
@@ -163,6 +164,45 @@ def scan(path: Path) -> str:
             pos += 4
         if found == 0:
             lines.append("  - No ELF64 AArch64 .modinfo module detected in XZ output.")
+    # include-flate uses DEFLATE and may store raw streams without a
+    # recognizable magic header. Candidate detection only, with a very
+    # short decoded-prefix test; fully inflate only ELF-looking prefixes.
+    lines += ["", "## Bounded raw-DEFLATE candidate inspection"]
+    possible = 0
+    accepted = []
+    data_len = len(blob)
+    for cursor in range(data_len - 96):
+        # Raw RFC1951: final-bit=1, dynamic huffman BTYPE=2.
+        # Other first-block arrangements cannot be excluded.
+        if (blob[cursor] & 7) != 5:
+            continue
+        possible += 1
+        try:
+            inflater = zlib.decompressobj(wbits=-15)
+            prefix = inflater.decompress(blob[cursor:cursor + 256], 16)
+            if not prefix.startswith(MAGIC):
+                continue
+            remaining = inflater.unconsumed_tail + blob[cursor + 256:]
+            decoded = prefix + inflater.decompress(remaining, 24_000_000)
+            if not inflater.eof:
+                continue
+            candidate = read_embedded_module(decoded, 0)
+            if candidate:
+                accepted.append((cursor, candidate))
+        except (zlib.error, MemoryError, ValueError):
+            continue
+    lines.append(f"- Candidate raw-DEFLATE dynamic/final headers tested: {possible}")
+    if not accepted:
+        lines.append(
+            "- No validated ELF AArch64 module found. This scan is incomplete "
+            "(multi-block and non-final-first-streams are not exhaustively parsed)."
+        )
+    for offset, entry in accepted[:32]:
+        lines.append(f"- Confirmed embedded compressed .ko candidate at 0x{offset:x}")
+        lines.append(f"  - Kernel symbol version table: {entry['has_symbol_crc_section']}")
+        for key in sorted(entry["modinfo"]):
+            values = ", ".join(entry["modinfo"][key][:3])
+            lines.append(f"  - {key}: {values}")
     lines += [
         "## Packaging signatures (diagnostic only)",
         f"- ELF64 marker count (including ksud executable): {blob.count(MAGIC)}",
