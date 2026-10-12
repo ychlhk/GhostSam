@@ -1,0 +1,153 @@
+name: KernelSU 32680 reference build (NO FLASH)
+
+on:
+  push:
+    branches:
+      - ksu-32680-compat
+    paths:
+      - '.github/workflows/ksu-32680-build.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-ksud-reference:
+    name: Compile reference ksud / arm64
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout pinned upstream KernelSU 32680
+        uses: actions/checkout@v4
+        with:
+          repository: tiann/KernelSU
+          ref: 0c0fdb960178fa12d80d6cbcfdcb6ad8be6a865d
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify exact source revision and build number
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "0c0fdb960178fa12d80d6cbcfdcb6ad8be6a865d"
+          count=$(git rev-list --count HEAD)
+          code=$((30000 + count))
+          echo "KernelSU source commit: $(git rev-parse HEAD)"
+          echo "Calculated KernelSU build number: $code"
+          test "$code" -eq 32680
+
+      - name: Install Rust Android build prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y clang libclang-dev llvm
+          rustup update stable
+          rustup target add aarch64-linux-android
+
+      - name: Install Android NDK r29
+        uses: nttld/setup-ndk@v1
+        id: ndk
+        with:
+          ndk-version: r29
+
+      - name: Configure libclang for bindgen
+        shell: bash
+        run: |
+          set -euo pipefail
+          clanglib=$(find /usr/lib/llvm-* -name libclang.so -print -quit)
+          test -n "$clanglib"
+          echo "LIBCLANG_PATH=$(dirname "$clanglib")" >> "$GITHUB_ENV"
+
+      - name: Compile ksud (no phone access)
+        shell: bash
+        env:
+          ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
+        run: |
+          set -euo pipefail
+          source .github/scripts/setup-rust-build.sh aarch64-linux-android 26
+          cargo build --locked --target "$TRIPLE" --release --manifest-path ./userspace/ksud/Cargo.toml
+
+      - name: Inspect and stage reference binary
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p reference-out
+          bin=target/aarch64-linux-android/release/ksud
+          test -s "$bin"
+          file "$bin"
+          readelf -h "$bin" | grep -E 'Class:|Machine:|Type:'
+          cp "$bin" reference-out/ksud-32680-REFERENCE-ONLY
+          sha256sum reference-out/* | tee reference-out/SHA256SUMS
+          cat > reference-out/NOT_FOR_DEVICE_INSTALL.txt <<'EOF'
+          Official tiann/KernelSU 32680 userspace build, for offline analysis ONLY.
+          NOT confirmed compatible with Samsung SM-S9360, GhostSam, its
+          currently running snothin/KernelSU-based LKM, or its loader.
+          Do NOT install this binary onto the phone.
+          EOF
+
+      - name: Store reference ksud output
+        uses: actions/upload-artifact@v4
+        with:
+          name: ksud-32680-reference-NOT-FOR-INSTALL
+          path: reference-out/
+          if-no-files-found: error
+          retention-days: 7
+
+  build-lkm-reference:
+    name: Compile GKI reference LKM / android15-6.6 (NOT Samsung)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    container:
+      image: ghcr.io/ylarod/ddk-min:android15-6.6-20260828
+    steps:
+      - name: Checkout pinned upstream KernelSU 32680
+        uses: actions/checkout@v4
+        with:
+          repository: tiann/KernelSU
+          ref: 0c0fdb960178fa12d80d6cbcfdcb6ad8be6a865d
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify source version
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          test "$(git rev-parse HEAD)" = "0c0fdb960178fa12d80d6cbcfdcb6ad8be6a865d"
+          count=$(git rev-list --count HEAD)
+          test "$((30000 + count))" -eq 32680
+
+      - name: Compile generic GKI reference module
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd kernel
+          CONFIG_KSU=m CC=clang make
+
+      - name: Inspect reference module and write warning
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p reference-out
+          test -s kernel/kernelsu.ko
+          file kernel/kernelsu.ko
+          cp kernel/kernelsu.ko reference-out/android15-6.6-GKI-kernelsu-32680-REFERENCE-ONLY.ko
+          sha256sum reference-out/*.ko > reference-out/SHA256SUMS
+          cat > reference-out/NOT_FOR_DEVICE_INSTALL.txt <<'EOF'
+          Generic GKI android15-6.6 module, built from OFFICIAL tiann/KernelSU.
+          This is NOT the GhostSam Samsung/KDP/DEFEX variant.
+          It is NOT validated against SM-S9360 vendor symbols/vermagic/CRC,
+          its booted kernel, manager authentication, loader or ksud UAPI.
+          Do NOT load, install or flash onto the Samsung phone.
+          A Samsung-specific reproducible kernel build tree and a
+          reviewed port of the GhostSam adaptations are still required.
+          EOF
+
+      - name: Store reference LKM output
+        uses: actions/upload-artifact@v4
+        with:
+          name: lkm-32680-GKI-reference-NOT-FOR-INSTALL
+          path: reference-out/
+          if-no-files-found: error
+          retention-days: 7
