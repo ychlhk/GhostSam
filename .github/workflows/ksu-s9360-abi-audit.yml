@@ -1,0 +1,92 @@
+name: SM-S9360 KernelSU experimental module ABI audit (NO INSTALL)
+
+on:
+  push:
+    branches: [ksu-32680-compat]
+    paths:
+      - '.github/workflows/ksu-s9360-abi-audit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  abi-metadata-audit:
+    name: Compile ephemeral GKI module and record ABI evidence
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    container:
+      image: ghcr.io/ylarod/ddk-min:android15-6.6-20260828
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: control
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: tiann/KernelSU
+          ref: 0c0fdb960178fa12d80d6cbcfdcb6ad8be6a865d
+          fetch-depth: 0
+          persist-credentials: false
+          path: ksu
+      - name: Recreate reviewed experimental merge (temporary workspace)
+        shell: bash
+        working-directory: ksu
+        env:
+          KSU_AUDIT_DIR: ${{ github.workspace }}/abi-audit
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$PWD"
+          bash ../control/scripts/ksu-32680-experimental-merge.sh
+          python3 ../control/scripts/ksu-32680-resolve-probe.py
+      - name: Compile and inspect module metadata without distributing binary
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd ksu/kernel
+          CONFIG_KSU=m CONFIG_KSU_SAMSUNG_KDP=y CONFIG_KSU_SAMSUNG_DEFEX=y CC=clang make
+          test -s kernelsu.ko
+          mkdir -p ../../abi-audit
+          {
+            echo '# SM-S9360 ABI preflight — EXPERIMENTAL, NOT INSTALLABLE'
+            echo
+            echo 'Target device: Samsung SM-S9360, Android 16, 4K pages'
+            echo 'Reported target release: 6.6.98-android15-8-p5a696e2-abogkiS9360ZCSCCZG1-4k'
+            echo 'Builder: generic android15-6.6 GKI DDK, NOT an exact Samsung kernel build tree'
+            echo
+            echo '## ELF and version evidence'
+            file kernelsu.ko
+            sha256sum kernelsu.ko
+            if command -v modinfo >/dev/null 2>&1; then
+              modinfo kernelsu.ko || true
+            else
+              echo 'modinfo unavailable in container'
+            fi
+            readelf -h kernelsu.ko || true
+            echo
+            echo '## Raw modinfo section'
+            readelf -p .modinfo kernelsu.ko || true
+            echo
+            echo '## Undefined symbols (need exact target-export and CRC matching)'
+            if command -v llvm-nm >/dev/null 2>&1; then
+              llvm-nm -u kernelsu.ko || true
+            else
+              nm -u kernelsu.ko || true
+            fi
+            echo
+            echo '## Symbol version section presence'
+            readelf -S kernelsu.ko | grep -E '__versions|__version_ext|\.modinfo' || true
+            echo
+            echo '## Result: BLOCKED for device installation'
+            echo 'No device-matching Module.symvers, vendor private exports, or vermagic compatibility test was supplied.'
+            echo 'A generic DDK compilation is insufficient to validate Samsung KDP/DEFEX or loader compatibility.'
+          } > ../../abi-audit/ABI_REPORT.txt 2>&1
+          # Deliberately do not copy or upload kernelsu.ko.
+      - name: Upload metadata and blockers only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: s9360-experimental-lkm-abi-metadata-NO-BINARY
+          path: abi-audit/
+          if-no-files-found: warn
+          retention-days: 7
