@@ -1,0 +1,96 @@
+name: KernelSU 32680 Samsung port feasibility audit (NO FLASH)
+
+on:
+  push:
+    branches: [ksu-32680-compat]
+    paths:
+      - '.github/workflows/ksu-port-feasibility.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check-upstream-differences:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout pinned official 32680 source
+        uses: actions/checkout@v4
+        with:
+          repository: tiann/KernelSU
+          ref: 0c0fdb960178fa12d80d6cbcfdcb6ad8be6a865d
+          fetch-depth: 0
+          persist-credentials: false
+          path: official
+
+      - name: Audit shared ancestry and overlapping source changes
+        shell: bash
+        env:
+          OFFICIAL_SHA: 0c0fdb960178fa12d80d6cbcfdcb6ad8be6a865d
+          SAMSUNG_SHA: 0fde5f940559d36c48c9516902b3a7ce944a80c5
+        run: |
+          set -euo pipefail
+          mkdir -p output
+          cd official
+          git remote add samsung https://github.com/snothin/KernelSU.git
+          git fetch --no-tags samsung "$SAMSUNG_SHA"
+          test "$(git rev-parse HEAD)" = "$OFFICIAL_SHA"
+          test "$(git rev-parse FETCH_HEAD)" = "$SAMSUNG_SHA"
+
+          if base=$(git merge-base "$OFFICIAL_SHA" "$SAMSUNG_SHA"); then
+            echo "$base" > ../output/merge-base.txt
+            git diff --name-only "$base" "$OFFICIAL_SHA" | sort > ../output/official-changed-files.txt
+            git diff --name-only "$base" "$SAMSUNG_SHA" | sort > ../output/samsung-changed-files.txt
+            comm -12 ../output/official-changed-files.txt ../output/samsung-changed-files.txt > ../output/overlapping-paths.txt
+
+            # A merge simulation writes no commits or working-tree changes.
+            set +e
+            git merge-tree --write-tree "$OFFICIAL_SHA" "$SAMSUNG_SHA" > ../output/merge-preview.txt 2>&1
+            merge_exit=$?
+            set -e
+          else
+            echo "NO_COMMON_ANCESTOR" > ../output/merge-base.txt
+            : > ../output/official-changed-files.txt
+            : > ../output/samsung-changed-files.txt
+            : > ../output/overlapping-paths.txt
+            echo "No shared history; automatic merge was not attempted." > ../output/merge-preview.txt
+            merge_exit=3
+          fi
+          echo "$merge_exit" > ../output/merge-exit-code.txt
+          {
+            echo '# Samsung KernelSU 32680 port feasibility'
+            echo
+            echo "- Official source: \`$OFFICIAL_SHA\`"
+            echo "- Samsung source: \`$SAMSUNG_SHA\`"
+            echo "- Common ancestor: \`$(cat ../output/merge-base.txt)\`"
+            echo "- Merge preview exit: \`$merge_exit\` (0=clean, 1=conflicts, 3=unrelated)"
+            echo "- Official paths changed since ancestor: $(wc -l < ../output/official-changed-files.txt)"
+            echo "- Samsung paths changed since ancestor: $(wc -l < ../output/samsung-changed-files.txt)"
+            echo "- Overlapping path changes: $(wc -l < ../output/overlapping-paths.txt)"
+            echo
+            echo '## Overlapping files (requires review even if merge is clean)'
+            sed -n '1,160p' ../output/overlapping-paths.txt
+            echo
+            echo '## Samsung-specific build components'
+            for f in kernel/compat/samsung_kdp.c kernel/compat/samsung_defex.c kernel/Kbuild kernel/core/init.c; do
+              if git cat-file -e "$SAMSUNG_SHA:$f" 2>/dev/null; then
+                echo "- present: $f"
+              else
+                echo "- MISSING: $f"
+              fi
+            done
+            echo
+            echo '## Safety and interpretation'
+            echo '- This is a source-comparison audit only; no merged build is produced.'
+            echo '- A successful automatic merge does not prove a safe Samsung LKM.'
+            echo '- Device-specific KDP/DEFEX symbol, vermagic and UAPI verification are required.'
+            echo '- No module loading, installation, or flashing.'
+          } > ../output/PORT_FEASIBILITY.md
+
+      - name: Upload diff audit
+        uses: actions/upload-artifact@v4
+        with:
+          name: samsung-32680-port-diff-audit
+          path: output/
+          retention-days: 7
