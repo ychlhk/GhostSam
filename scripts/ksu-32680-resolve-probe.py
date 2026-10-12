@@ -67,7 +67,7 @@ start = fork.index('#include "policy/allowlist.h"')
 end = fork.index("\n#ifdef CONFIG_KRETPROBES\n", start)
 block = fork[start:end]
 if "static int samsung_sucompat_hook_init(" not in s:
-    s = replace_once(s, "\n#ifdef CONFIG_KRETPROBES\n", "\n" + block + "\n\n#ifdef CONFIG_KRETPROBES\n", path)
+    s = replace_once(s, "\n#ifdef CONFIG_KRETPROBES\n\nstatic struct kretprobe *init_kretprobe", "\n" + block + "\n\n#ifdef CONFIG_KRETPROBES\n\nstatic struct kretprobe *init_kretprobe", path)
     save(path, s)
     changes.append(path + ": preserve existing Samsung hook definitions")
 assert '#include "hook/riscv64/syscall_regs.h"' in s
