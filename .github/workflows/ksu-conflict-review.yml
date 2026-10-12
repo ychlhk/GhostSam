@@ -1,0 +1,72 @@
+name: KernelSU 32680 five-conflict review bundle
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ksu-32680-compat]
+    paths: ['.github/workflows/ksu-conflict-review.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  conflict-review:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Fetch pinned official 32680 source
+        uses: actions/checkout@v4
+        with:
+          repository: tiann/KernelSU
+          ref: 0c0fdb960178fa12d80d6cbcfdcb6ad8be6a865d
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Prepare exact base-to-tip review material (no merge, no execution)
+        shell: bash
+        run: |
+          set -euo pipefail
+          git remote add samsung https://github.com/snothin/KernelSU.git
+          git fetch --no-tags samsung 0fde5f940559d36c48c9516902b3a7ce944a80c5
+          official=0c0fdb960178fa12d80d6cbcfdcb6ad8be6a865d
+          samsung=0fde5f940559d36c48c9516902b3a7ce944a80c5
+          base=$(git merge-base "$official" "$samsung")
+          test -n "$base"
+          mkdir -p review
+          printf 'shared ancestor: %s\nofficial: %s\nsamsung: %s\n' "$base" "$official" "$samsung" > review/REVISIONS.txt
+          cat > review/CONFLICTS.txt <<'EOF'
+          kernel/core/init.c
+          kernel/feature/selinux_hide.c
+          kernel/hook/syscall_hook_manager.c
+          uapi/supercall.h
+          userspace/ksud/src/late_load.rs
+          EOF
+          while IFS= read -r f; do
+            n=$(printf '%s' "$f" | tr '/' '_')
+            git diff --no-ext-diff --no-color "$base" "$official" -- "$f" > "review/${n}.official.patch" || test "$?" -eq 1
+            git diff --no-ext-diff --no-color "$base" "$samsung" -- "$f" > "review/${n}.samsung.patch" || test "$?" -eq 1
+            for side in base official samsung; do
+              case "$side" in
+                base) rev="$base";;
+                official) rev="$official";;
+                samsung) rev="$samsung";;
+              esac
+              git show "$rev:$f" > "review/${n}.${side}.txt"
+              sha256sum "review/${n}.${side}.txt" >> review/SHA256SUMS
+            done
+          done < review/CONFLICTS.txt
+          cat > review/README.md <<'EOF'
+          # Five-conflict manual review bundle
+          Contains exact version-pinned source snapshots, SHA-256s, and separate
+          ancestor-to-official and ancestor-to-Samsung patches.
+          Nothing is auto-merged and no device firmware is generated.
+          Review KDP/DEFEX, SELinux, syscall interception, UAPI and late-load
+          behavior as a coherent system; a clean Git merge is NOT proof of safety.
+          EOF
+
+      - name: Upload deterministic conflict bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: ksu-32680-five-conflict-review
+          path: review/
+          retention-days: 7
