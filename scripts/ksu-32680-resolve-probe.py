@@ -93,6 +93,28 @@ if old in s and "Command::" not in s:
 for required in ["ScriptWait", "stage_daemon_from", "finish_install"]:
     assert required in s, f"Missing late-load capability {required}"
 
+# Additional overlapping source: upstream moved old_pol assignment under the
+# mutex, whereas the Samsung fork inserted its null guard before the mutex.
+# Preserve the guard, but move it after the locked pointer fetch.
+path = "kernel/selinux/rules.c"
+s = file(path)
+start_marker = "    /* No policy loaded yet; ksu_dup_sepolicy() would oops on the NULL policy. */"
+lock_marker = "    mutex_lock(&selinux_state.policy_mutex);"
+assign_marker = "    old_pol = rcu_dereference_protected(selinux_state.policy, lockdep_is_held(&selinux_state.policy_mutex));"
+if start_marker in s:
+    start = s.index(start_marker)
+    end = s.index(lock_marker, start)
+    guard = s[start:end]
+    assert guard.count("if (!old_pol)") == 1
+    assert guard.count("        return;") == 1
+    s = s[:start] + s[end:]
+    guard = guard.replace("        return;", "        mutex_unlock(&selinux_state.policy_mutex);\n        return;", 1)
+    s = replace_once(s, assign_marker, assign_marker + "\n" + guard.rstrip(), path)
+    save(path, s)
+    changes.append(path + ": preserve Samsung null guard after official locked policy lookup")
+assert s.count("if (!old_pol)") == 1
+assert s.index(lock_marker) < s.index(assign_marker) < s.index("if (!old_pol)")
+
 subprocess.run(["git", "diff", "--check"], check=True)
 with (OUT / "CONFLICT_RESOLUTIONS.md").open("w") as report:
     report.write("# Experimental Samsung 32680 source-resolution audit\n\n")
