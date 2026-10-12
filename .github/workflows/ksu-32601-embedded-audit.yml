@@ -1,0 +1,40 @@
+name: Audit installed GhostSam 32601 ksud embedded LKM (READ ONLY)
+
+on:
+  push:
+    branches: [ksu-32680-compat]
+    paths:
+      - '.github/workflows/ksu-32601-embedded-audit.yml'
+      - 'scripts/audit-bundled-ksud.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  embedded-elf-inventory:
+    name: Identify embedded KernelSU modules in verified 32601 ksud
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Checkout independent review branch (no binary execution)
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Verify SHA256 and inventory bundled ELF metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/audit-bundled-ksud.py \
+            app/app/src/main/assets/payloads/ksud/ksud \
+            --report audit/32601-bundled-ksud-elf-report.md
+
+      - name: Upload text report only, never ksud or ko binaries
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ghostsam-32601-embedded-module-inventory-TEXT-ONLY
+          path: audit/32601-bundled-ksud-elf-report.md
+          retention-days: 14
+          if-no-files-found: warn
