@@ -95,6 +95,8 @@ def main() -> None:
         "candidate_has_upstream_install": "utils::install(None, None)" in merged_late,
         "candidate_has_exynos_variant": "KSUD_TREE" in merged_late,
         "candidate_has_upstream_daemonize": "utils::daemonize(false)" in merged_late,
+        "official_has_daemonize": "utils::daemonize(false)" in new_late,
+        "samsung_has_daemonize": "utils::daemonize(false)" in old_late,
         "candidate_uses_kmi_lkm": 'format!("{kmi}_kernelsu.ko")' in merged_late,
         "candidate_calls_common_loader": "ksuinit::load_module(&ko_data, params)" in merged_late,
         "official_hash": fingerprint(new_late),
@@ -179,7 +181,24 @@ def main() -> None:
         ),
     }
 
+    manual_review_blockers = [
+        "Working Samsung userspace uses UAPI 2; merged kernel/userspace use UAPI 5: "
+        "device and manager protocol interoperability not validated.",
+        "Samsung KDP/DEFEX, SELinux and vendor private symbol semantics require "
+        "exact-device review; source presence/ordering is not a runtime test.",
+        "Exact SM-S9360 exported symbols/CRCs and module-vendor ABI are unknown.",
+        "No validated controlled recovery / install test is approved.",
+    ]
+    if (late_checks["official_has_daemonize"]
+            and not late_checks["candidate_has_upstream_daemonize"]):
+        manual_review_blockers.append(
+            "Official late-load daemonize(false) is absent from Samsung "
+            "baseline and the merged candidate; process-lifecycle behavior "
+            "requires an explicit review, not an automatic code insertion."
+        )
+
     report = {
+        "manual_review_blockers": manual_review_blockers,
         "inputs": {"official": OFFICIAL, "samsung": SAMSUNG},
         "loader": loader_checks, "late_load": late_checks,
         "uapi": uapi_checks, "init": init_checks, "selinux": selinux_checks,
@@ -218,6 +237,9 @@ def main() -> None:
     rows.extend(f"  - {key}: {'present' if x['candidate'] else 'MISSING'}"
                 for key, x in init_checks["upstream_new_init_markers"].items())
     rows += [
+        "",
+        "## Outstanding semantic and device-specific blockers",
+        *[f"- {item}" for item in manual_review_blockers],
         "",
         "## Release decision: **BLOCKED / NOT INSTALLABLE**",
         "Passing these static gates would still not verify memory safety, symbol CRCs, "
