@@ -1,0 +1,80 @@
+name: KernelSU UAPI contract comparison (read only)
+
+on:
+  push:
+    branches: [ksu-32680-compat]
+    paths: ['.github/workflows/ksu-uapi-contract.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compare-uapi:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout official source pinned to 32680
+        uses: actions/checkout@v4
+        with:
+          repository: tiann/KernelSU
+          ref: 0c0fdb960178fa12d80d6cbcfdcb6ad8be6a865d
+          persist-credentials: false
+          path: official
+      - name: Checkout Samsung fork reference
+        uses: actions/checkout@v4
+        with:
+          repository: snothin/KernelSU
+          ref: 0fde5f940559d36c48c9516902b3a7ce944a80c5
+          persist-credentials: false
+          path: samsung
+      - name: Generate fail-closed UAPI comparison
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p output
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          import difflib
+          import json
+          def data(side):
+              p=Path(side)/'uapi/supercall.h'
+              s=p.read_text()
+              vers=re.search(r'KERNEL_SU_UAPI_VERSION\s*=\s*(\d+)',s)
+              if not vers:
+                  raise RuntimeError(f'missing UAPI version in {side}')
+              structs=re.findall(r'\bstruct\s+(ksu_[a-zA-Z0-9_]+)\s*\{(.*?)\}\s*;',s,re.S)
+              flags=dict(re.findall(r'\b(KSU_GET_INFO_FLAG_[A-Z_]+)\s*=\s*\(([^;]+)\);',s))
+              return {'version':int(vers.group(1)),
+                      'structs':{n:re.sub(r'\s+',' ',re.sub(r'/\*.*?\*/|//[^\n]*','',v,flags=re.S)).strip() for n,v in structs},
+                      'flags':flags},s
+          a,sa=data('official')
+          b,sb=data('samsung')
+          names=sorted(set(a['structs'])|set(b['structs']))
+          discrepancies=[{'name':n,'official':a['structs'].get(n),'samsung':b['structs'].get(n)}
+                           for n in names if a['structs'].get(n)!=b['structs'].get(n)]
+          report={'source_revisions':{'official':'0c0fdb960178fa12d80d6cbcfdcb6ad8be6a865d',
+                     'samsung':'0fde5f940559d36c48c9516902b3a7ce944a80c5'},
+                  'uapi_versions':{'official':a['version'],'samsung':b['version']},
+                  'field_declaration_differences':discrepancies,
+                  'get_info_flags':{'official':a['flags'],'samsung':b['flags']},
+                  'compatible':False,
+                  'caveat':'Textual declarations only; not a compiler-level ABI or runtime check.'}
+          Path('output/uapi-contract.json').write_text(json.dumps(report,indent=2)+'\n')
+          Path('output/uapi-supercall.diff').write_text(''.join(difflib.unified_diff(sb.splitlines(True),sa.splitlines(True),
+                                            fromfile='samsung/uapi/supercall.h',tofile='official/uapi/supercall.h')))
+          Path('output/README.md').write_text(
+               '# UAPI offline gate\n\n'
+               f"Official UAPI: {a['version']}; Samsung fork UAPI: {b['version']}.\n\n"
+               f"Struct textual differences: {len(discrepancies)}.\n\n"
+               '**Compatibility verdict: NOT VERIFIED; fail closed.**\n'
+               'No root logic, module, loader, or phone was changed.\n')
+          print(Path('output/README.md').read_text())
+          PY
+      - name: Store comparison report only
+        uses: actions/upload-artifact@v4
+        with:
+          name: ksu-32680-uapi-contract-review
+          path: output/
+          retention-days: 7
