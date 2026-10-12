@@ -1,0 +1,64 @@
+name: KernelSU 32680 static compatibility audit
+
+on:
+  push:
+    branches:
+      - ksu-32680-compat
+    paths:
+      - '.github/workflows/ksu-32680-audit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  static-audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout isolated branch
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Inspect sources and binaries without executing them
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p audit
+          {
+            echo '# KernelSU 32680 compatibility audit'
+            echo
+            echo '- Phone: Samsung SM-S9360 (reported by owner)'
+            echo '- Kernel: 6.6.98-android15-8, 4K pages (reported by owner)'
+            echo '- Active LKM: 32601-2 (reported by manager)'
+            echo '- Active ksud: pre-sync-20260929-67-g9263f621, UAPI 2 (reported by device)'
+            echo '- Target manager: 32680-5'
+            echo
+            echo "Repository commit: \`$(git rev-parse HEAD)\`"
+            echo
+            echo '## Upstream references'
+            grep -nE 'snothin/KernelSU|snothin/KernelSU-Next|android15-6.6' README.md || true
+            echo
+            echo '## Relevant files and SHA-256'
+            find . -type f \( -name 'ksud' -o -name 'ksud-next' -o -name '*.ko' \) ! -path './.git/*' -print0 | sort -z |
+              while IFS= read -r -d '' f; do
+                echo
+                echo "### $f"
+                file "$f"
+                sha256sum "$f"
+                readelf -h "$f" 2>&1 | head -25 || true
+              done
+            echo
+            echo '## Unverified requirements'
+            echo '- Exact KernelSU 32680 source commit and branch compatibility'
+            echo '- Matching prepared kernel tree, symbol versions, vermagic, and KMI'
+            echo '- UAPI / ksud protocol compatibility with the current loader'
+            echo '- No compilation, installation, module insertion, or flashing performed'
+          } | tee audit/report.md
+
+      - name: Upload report
+        uses: actions/upload-artifact@v4
+        with:
+          name: ksu-32680-static-audit
+          path: audit/report.md
