@@ -109,7 +109,10 @@ if start_marker in s:
     assert guard.count("        return;") == 1
     s = s[:start] + s[end:]
     guard = guard.replace("        return;", "        mutex_unlock(&selinux_state.policy_mutex);\n        return;", 1)
-    s = replace_once(s, assign_marker, assign_marker + "\n" + guard.rstrip(), path)
+    # Multiple functions use this same assignment. Target only the one
+    # inside apply_kernelsu_rules(), directly after its policy mutex lock.
+    position = s.index(assign_marker, s.index(lock_marker, s.index("void apply_kernelsu_rules()")))
+    s = s[:position] + assign_marker + "\n" + guard.rstrip() + s[position + len(assign_marker):]
     save(path, s)
     changes.append(path + ": preserve Samsung null guard after official locked policy lookup")
 assert s.count("if (!old_pol)") == 1
