@@ -1,0 +1,135 @@
+name: KernelSU 32680 Samsung experimental integration compile (NO FLASH)
+
+on:
+  push:
+    branches: [ksu-32680-compat]
+    paths:
+      - '.github/workflows/ksu-32680-integration.yml'
+      - 'scripts/ksu-32680-experimental-merge.sh'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lkm-integration:
+    name: Guarded Samsung LKM integration compile (non-installable)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    container:
+      image: ghcr.io/ylarod/ddk-min:android15-6.6-20260828
+    steps:
+      - name: Checkout GhostSam integration checks
+        uses: actions/checkout@v4
+        with:
+          path: control
+          persist-credentials: false
+
+      - name: Checkout fixed KernelSU 32680 source
+        uses: actions/checkout@v4
+        with:
+          repository: tiann/KernelSU
+          ref: 0c0fdb960178fa12d80d6cbcfdcb6ad8be6a865d
+          fetch-depth: 0
+          path: ksu
+          persist-credentials: false
+
+      - name: Create source merge and enforce preservation gate
+        shell: bash
+        working-directory: ksu
+        env:
+          KSU_AUDIT_DIR: ${{ github.workspace }}/audit-lkm
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$PWD"
+          bash ../control/scripts/ksu-32680-experimental-merge.sh
+
+      - name: Compile experimental GKI Samsung-flagged source
+        shell: bash
+        working-directory: ksu/kernel
+        run: |
+          set -euo pipefail
+          CONFIG_KSU=m CONFIG_KSU_SAMSUNG_KDP=y CONFIG_KSU_SAMSUNG_DEFEX=y CC=clang make
+          test -s kernelsu.ko
+          file kernelsu.ko
+          sha256sum kernelsu.ko
+          echo 'This compile is NOT a Samsung runtime compatibility validation.'
+
+      - name: Upload audit notes only (no binary artifacts)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: experimental-samsung-32680-lkm-merge-review
+          path: audit-lkm/
+          if-no-files-found: warn
+          retention-days: 7
+
+  ksud-integration:
+    name: Guarded Samsung ksud integration compile (non-installable)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    steps:
+      - name: Checkout GhostSam integration checks
+        uses: actions/checkout@v4
+        with:
+          path: control
+          persist-credentials: false
+
+      - name: Checkout fixed KernelSU 32680 source
+        uses: actions/checkout@v4
+        with:
+          repository: tiann/KernelSU
+          ref: 0c0fdb960178fa12d80d6cbcfdcb6ad8be6a865d
+          fetch-depth: 0
+          path: ksu
+          persist-credentials: false
+
+      - name: Create source merge and enforce preservation gate
+        shell: bash
+        working-directory: ksu
+        env:
+          KSU_AUDIT_DIR: ${{ github.workspace }}/audit-ksud
+        run: |
+          set -euo pipefail
+          bash ../control/scripts/ksu-32680-experimental-merge.sh
+
+      - name: Install Rust build prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y clang libclang-dev llvm
+          rustup update stable
+          rustup target add aarch64-linux-android
+
+      - name: Setup Android NDK r29
+        uses: nttld/setup-ndk@v1
+        id: ndk
+        with:
+          ndk-version: r29
+
+      - name: Compile temporary merged ksud (not for install)
+        working-directory: ksu
+        shell: bash
+        env:
+          ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
+        run: |
+          set -euo pipefail
+          clanglib=$(find /usr/lib/llvm-* -name libclang.so -print -quit)
+          test -n "$clanglib"
+          export LIBCLANG_PATH="$(dirname "$clanglib")"
+          source .github/scripts/setup-rust-build.sh aarch64-linux-android 26
+          cargo build --locked --target "$TRIPLE" --release --manifest-path userspace/ksud/Cargo.toml
+          test -s target/aarch64-linux-android/release/ksud
+          file target/aarch64-linux-android/release/ksud
+          sha256sum target/aarch64-linux-android/release/ksud
+          echo 'This is compile-only, not a validated device ksud.'
+
+      - name: Upload audit notes only (no binary artifacts)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: experimental-samsung-32680-ksud-merge-review
+          path: audit-ksud/
+          if-no-files-found: warn
+          retention-days: 7
