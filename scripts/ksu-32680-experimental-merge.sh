@@ -73,3 +73,21 @@ if [ "$failed" -ne 0 ]; then
   exit 21
 fi
 echo "PRESENCE CHECK PASSED (does not demonstrate runtime correctness)" | tee -a "$OUT_DIR/RESULT.md"
+
+# Repair a compile-only declaration omission caused by the mechanical merge.
+# The Samsung init path uses ret, while official 32680 removed its declaration.
+# This patch declares only that local variable and changes no call or branch.
+python3 - <<'PY'
+from pathlib import Path
+p = Path("kernel/core/init.c")
+s = p.read_text()
+anchor = "int __init kernelsu_init(void)\n{\n"
+if s.count(anchor) != 1:
+    raise SystemExit("Expected init function signature not uniquely found")
+before, after = s.split(anchor, 1)
+if after.lstrip().startswith("int ret;"):
+    raise SystemExit("Unexpected ret declaration already present; review required")
+s = before + anchor + "    int ret;\n" + after
+p.write_text(s)
+PY
+echo "COMPILE-ONLY: declared local int ret in merged kernel/core/init.c" >> "$OUT_DIR/RESULT.md"
