@@ -17,6 +17,28 @@
 - `llvm-nm -u` (undefined external symbol references) yielded **228 unique symbols**. These are references awaiting resolution, **not proof that 228 exports are missing**.
 - `modinfo depends` is empty; this does not prove Samsung KDP/DEFEX symbol availability, particularly for dynamically resolved names.
 
+## Confirmed on-device identification (terminal output; 2026-10-13)
+
+Read-only terminal commands completed with exit code 0:
+
+| Field | Confirmed value |
+|---|---|
+| `ro.product.model` | `SM-S9360` |
+| `uname -r` | `6.6.98-android15-8-p5a696e2-abogkiS9360ZCSCCZG1-4k` |
+| `ro.build.display.id` | `BP4A.251205.006.S9360ZCSCCZG1` |
+| `ro.boot.bootloader` | `S9360ZCSCCZG1` |
+| `getconf PAGESIZE` | `4096` |
+
+External firmware catalogs list `S9360ZCSCCZG1` under **SM-S9360 / CHC (China)**, Android 16:
+- https://samfw.com/firmware/SM-S9360/CHC
+- https://www.sammobile.com/samsung/galaxy-s25-plus/firmware/
+
+**Source availability:** Samsung's official release site offers mobile source downloads, but a publicly indexed, exact-version `S9360ZCSCCZG1` kernel source package and its matching `Module.symvers` were **not independently located or verified** as of this review. A full consumer firmware ZIP is **not** a kernel source/build tree or an ABI validation by itself.
+- Official release center: https://opensource.samsung.com/uploadList?classification1=mobile_phone&menuItem=mobile
+- Official source-code inquiry: https://opensource.samsung.com/requestInquiry
+
+**Hard block remains:** experimental module `6.6.127-4k` is NOT the target `6.6.98-android15-8-...-4k` build, regardless of both having 4K pages.
+
 ## Device-specific verification still required
 
 1. Confirm exact phone `uname -r`, fingerprint, AP/baseband/firmware and page size without altering the device.
