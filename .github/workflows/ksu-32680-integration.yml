@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/workflows/ksu-32680-integration.yml'
       - 'scripts/ksu-32680-experimental-merge.sh'
+      - 'scripts/ksu-32680-resolve-probe.py'
   workflow_dispatch:
 
 permissions:
@@ -43,6 +44,13 @@ jobs:
           set -euo pipefail
           git config --global --add safe.directory "$PWD"
           bash ../control/scripts/ksu-32680-experimental-merge.sh
+
+      - name: Apply five reviewed compile-only conflict resolutions
+        shell: bash
+        working-directory: ksu
+        env:
+          KSU_AUDIT_DIR: ${{ github.workspace }}/audit-lkm
+        run: python3 ../control/scripts/ksu-32680-resolve-probe.py
 
       - name: Compile experimental GKI Samsung-flagged source
         shell: bash
@@ -92,6 +100,13 @@ jobs:
         run: |
           set -euo pipefail
           bash ../control/scripts/ksu-32680-experimental-merge.sh
+
+      - name: Apply five reviewed compile-only conflict resolutions
+        shell: bash
+        working-directory: ksu
+        env:
+          KSU_AUDIT_DIR: ${{ github.workspace }}/audit-ksud
+        run: python3 ../control/scripts/ksu-32680-resolve-probe.py
 
       - name: Install Rust build prerequisites
         shell: bash
