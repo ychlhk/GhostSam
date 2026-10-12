@@ -61,6 +61,13 @@ jobs:
           clanglib=$(find /usr/lib/llvm-* -name libclang.so -print -quit)
           test -n "$clanglib"
           export LIBCLANG_PATH="$(dirname "$clanglib")"
+          # The historical Kernel-SU git organisation URLs are unavailable.
+          # The exact pinned Cargo.lock commits were verified in KernelSU2
+          # mirrors for adb_client, java-properties, ksu_props and rustix.
+          # Git url.insteadOf changes only fetch transport, not source revisions.
+          git config --global url."https://github.com/KernelSU2/".insteadOf "https://github.com/Kernel-SU/"
+          export CARGO_NET_GIT_FETCH_WITH_CLI=true
+          echo "Using verified KernelSU2 mirrors for historical pinned dependencies"
           source .github/scripts/setup-rust-build.sh aarch64-linux-android 26
           cargo build --locked --target "$TRIPLE" --release --manifest-path ./userspace/ksud/Cargo.toml
 
