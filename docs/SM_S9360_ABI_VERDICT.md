@@ -37,7 +37,7 @@ External firmware catalogs list `S9360ZCSCCZG1` under **SM-S9360 / CHC (China)**
 - Official release center: https://opensource.samsung.com/uploadList?classification1=mobile_phone&menuItem=mobile
 - Official source-code inquiry: https://opensource.samsung.com/requestInquiry
 
-**Hard block remains:** experimental module `6.6.127-4k` is NOT the target `6.6.98-android15-8-...-4k` build, regardless of both having 4K pages.
+**Version mismatch is not a standalone rejection proof:** the working 32601 ksud contains an Android15-6.6 LKM with the **same** generic GKI `6.6.127-4k-g46a034eca005-dirty` vermagic as our experimental 32680. The GhostSam late-load path uses custom in-memory relocation, not necessarily the stock kernel module loader. This does NOT prove 32680 compatibility: Samsung symbol/CRC, loader semantics, UAPI, KDP/DEFEX, and SELinux remain unresolved. See [32601 embedded baseline](KSU_32601_EMBEDDED_BASELINE.md).
 
 ## Device-specific verification still required
 
