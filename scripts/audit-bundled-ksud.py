@@ -7,6 +7,7 @@ Only bounded ELF section headers and .modinfo are inspected.
 from __future__ import annotations
 import argparse
 import hashlib
+import lzma
 from pathlib import Path
 import re
 import struct
@@ -125,6 +126,43 @@ def scan(path: Path) -> str:
             for value in mod["modinfo"][key][:3]:
                 lines.append(f"- \`{key}\`: \`{value}\`")
         lines.append("")
+    # Inspect the signature-identified XZ resources without executing or
+    # writing decompressed bytes. Enforce decoder memory and output limits.
+    lines += ["", "## Bounded XZ resource inspection"]
+    xz_magic = bytes.fromhex("fd377a585a00")
+    xz_positions = [i for i in range(len(blob)) if blob.startswith(xz_magic, i)]
+    if not xz_positions:
+        lines.append("- No XZ magic identified.")
+    for xz_offset in xz_positions[:8]:
+        try:
+            decoder = lzma.LZMADecompressor(
+                format=lzma.FORMAT_XZ, memlimit=128 * 1024 * 1024
+            )
+            expanded = decoder.decompress(blob[xz_offset:], max_length=40_000_000)
+            if not decoder.eof:
+                lines.append(f"- XZ at 0x{xz_offset:x}: incomplete or exceeds safety limit")
+                continue
+        except (lzma.LZMAError, EOFError, MemoryError) as exc:
+            lines.append(f"- XZ at 0x{xz_offset:x}: decoder rejected ({type(exc).__name__})")
+            continue
+        lines.append(
+            f"- XZ at 0x{xz_offset:x}: valid stream, "
+            f"expanded={len(expanded)} bytes, ELF signatures={expanded.count(MAGIC)}"
+        )
+        found = 0
+        pos = 0
+        while (pos := expanded.find(MAGIC, pos)) != -1:
+            module = read_embedded_module(expanded, pos)
+            if module is not None:
+                found += 1
+                lines.append(f"  - Embedded ELF module at expanded offset 0x{pos:x}")
+                lines.append(f"  - Has symbol version section: {module['has_symbol_crc_section']}")
+                for key in sorted(module["modinfo"]):
+                    values = ", ".join(module["modinfo"][key][:3])
+                    lines.append(f"  - {key}: {values}")
+            pos += 4
+        if found == 0:
+            lines.append("  - No ELF64 AArch64 .modinfo module detected in XZ output.")
     lines += [
         "## Packaging signatures (diagnostic only)",
         f"- ELF64 marker count (including ksud executable): {blob.count(MAGIC)}",
