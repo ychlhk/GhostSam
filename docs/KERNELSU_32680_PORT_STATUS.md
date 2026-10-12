@@ -49,3 +49,16 @@ Other overlapping source paths, including `kernel/Kbuild`, merit manual review e
 **Safety gate:** none of the produced `.ko` or `ksud` artifacts are verified safe for installation on SM-S9360. Current on-device LKM 32601-2 and installed ksud were not changed. No phone operations, module loading, or flashing have been performed.
 
 This document is intentionally confined to `ksu-32680-compat`, with no changes to `main`.
+
+
+## Compile-only integrated 32680 Samsung candidate — success (2026-10-13)
+
+Confirmed completed [GitHub Actions run #38286208969](https://github.com/ychlhk/GhostSam/actions/runs/38286208969), fixed source revisions listed above:
+
+- **Merged LKM**: compiled successfully for reference GKI `android15-6.6` with Samsung KDP/DEFEX build options. Version generated from Git source count: **32680**. `check_symbol` passed against the generic DDK `vmlinux`. ELF: AArch64 relocatable module. SHA-256: `1f2bf9a2f43a4978de1ba349e15dce19c69e656c3cfa32c19f8bec9e0d662c96`.
+- **Merged ARM64 ksud**: Rust release cross-build successful. ELF: AArch64 PIE, interpreter `/system/bin/linker64`. SHA-256: `4a245782d71c3d7ca9e486eb14e7dc31600022b20e1cc620cb71fce8db81bb47`.
+- The workflow uploaded **review reports only**, not executable binaries, by design.
+
+This candidate is formed through a deterministic mechanical `git merge -X ours` plus explicit compile-only conflict restoration in `scripts/ksu-32680-resolve-probe.py`. The fixed sites include the five overlapping conflict files and the incorrectly ordered `old_pol` guard in `kernel/selinux/rules.c`.
+
+**Not validated for SM-S9360 and NOT FOR INSTALLATION.** Passing this generic build does not establish Samsung vendor kernel ABI, `vermagic`, exported symbols/CRC, Samsung KDP/DEFEX behavior, manager authentication, SELinux safety, or UAPI 5 interoperability with the existing UAPI 2 loader. All 12 overlapping paths require complete semantic review. The phone and its current Root remain untouched.
