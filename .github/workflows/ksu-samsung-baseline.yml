@@ -1,0 +1,148 @@
+name: GhostSam Samsung KernelSU baseline build (NO FLASH)
+
+on:
+  push:
+    branches:
+      - ksu-32680-compat
+    paths:
+      - '.github/workflows/ksu-samsung-baseline.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  SOURCE_REPOSITORY: snothin/KernelSU
+  SOURCE_SHA: 0fde5f940559d36c48c9516902b3a7ce944a80c5
+
+jobs:
+  samsung-ksud-baseline:
+    name: Samsung fork ksud baseline / arm64
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout exact GhostSam upstream fork commit
+        uses: actions/checkout@v4
+        with:
+          repository: snothin/KernelSU
+          ref: 0fde5f940559d36c48c9516902b3a7ce944a80c5
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Identify source revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          echo "Pinned Samsung source SHA: $(git rev-parse HEAD)"
+          echo "Calculated source version (not manually overwritten): $((30000 + $(git rev-list --count HEAD)))"
+
+      - name: Install cross compiler dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y clang libclang-dev llvm
+          rustup update stable
+          rustup target add aarch64-linux-android
+
+      - name: Android NDK r29
+        uses: nttld/setup-ndk@v1
+        id: ndk
+        with:
+          ndk-version: r29
+
+      - name: Build Samsung-fork ksud
+        env:
+          ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          clanglib=$(find /usr/lib/llvm-* -name libclang.so -print -quit)
+          test -n "$clanglib"
+          export LIBCLANG_PATH="$(dirname "$clanglib")"
+          source .github/scripts/setup-rust-build.sh aarch64-linux-android 26
+          cargo build --locked --target "$TRIPLE" --release --manifest-path ./userspace/ksud/Cargo.toml
+
+      - name: Inspect baseline ksud artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p baseline-out
+          bin=target/aarch64-linux-android/release/ksud
+          test -s "$bin"
+          file "$bin"
+          readelf -h "$bin" | grep -E 'Class:|Machine:|Type:'
+          cp "$bin" baseline-out/ksud-SAMSUNG-FORK-BASELINE-NOT-32680
+          sha256sum baseline-out/ksud-* > baseline-out/SHA256SUMS
+          cat > baseline-out/NOT_FOR_INSTALL.txt <<'EOF'
+          Built from an unchanged, pinned snothin/KernelSU Samsung fork commit.
+          This is a control build, NOT a port to KernelSU 32680.
+          Do not replace /data/adb/ksud with this reference build.
+          Current running ksud and GhostSam's loader require further verification.
+          EOF
+
+      - name: Upload baseline ksud
+        uses: actions/upload-artifact@v4
+        with:
+          name: samsung-fork-ksud-baseline-NOT-FOR-INSTALL
+          path: baseline-out/
+          retention-days: 7
+
+  samsung-lkm-baseline:
+    name: Samsung fork KDP DEFEX reference LKM / android15-6.6
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    container:
+      image: ghcr.io/ylarod/ddk-min:android15-6.6-20260828
+    steps:
+      - name: Checkout exact Samsung fork commit
+        uses: actions/checkout@v4
+        with:
+          repository: snothin/KernelSU
+          ref: 0fde5f940559d36c48c9516902b3a7ce944a80c5
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify source revision and print KMI
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          echo "Source: $(git rev-parse HEAD)"
+          echo "GKI KMI: android15-6.6 (not Samsung build identity)"
+          echo "Calculated source version: $((30000 + $(git rev-list --count HEAD)))"
+
+      - name: Compile experimental Samsung-flagged LKM in generic DDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd kernel
+          CONFIG_KSU=m CONFIG_KSU_SAMSUNG_KDP=y CONFIG_KSU_SAMSUNG_DEFEX=y CC=clang make
+
+      - name: Record module ABI and warning
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p baseline-out
+          test -s kernel/kernelsu.ko
+          file kernel/kernelsu.ko
+          if command -v modinfo >/dev/null; then
+            modinfo kernel/kernelsu.ko | grep -E 'filename:|vermagic:|depends:' || true
+          fi
+          cp kernel/kernelsu.ko baseline-out/kernelsu-SAMSUNG-FORK-GKI-CONTROL-NOT-32680.ko
+          sha256sum baseline-out/*.ko > baseline-out/SHA256SUMS
+          cat > baseline-out/NOT_FOR_INSTALL.txt <<'EOF'
+          Experimental KDP/DEFEX compile against GENERIC android15-6.6 DDK.
+          Does not prove availability of Samsung KDP/DEFEX private symbols.
+          Does not match SM-S9360 vendor kernel 6.6.98 ABI or loader.
+          Not KernelSU 32680 and NOT safe to load, install, or flash.
+          EOF
+
+      - name: Upload experimental baseline module
+        uses: actions/upload-artifact@v4
+        with:
+          name: samsung-fork-lkm-GKI-control-NOT-FOR-INSTALL
+          path: baseline-out/
+          retention-days: 7
