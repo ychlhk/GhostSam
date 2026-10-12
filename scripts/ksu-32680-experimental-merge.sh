@@ -91,3 +91,22 @@ s = before + anchor + "    int ret;\n" + after
 p.write_text(s)
 PY
 echo "COMPILE-ONLY: declared local int ret in merged kernel/core/init.c" >> "$OUT_DIR/RESULT.md"
+
+# Retain the original Samsung init/exit state marker when the automatic
+# three-way merge keeps its use sites but drops the declaration.
+# Fail closed if the source shape is different than the audited case.
+python3 - <<'PY'
+from pathlib import Path
+p = Path("kernel/hook/syscall_hook_manager.c")
+s = p.read_text()
+marker = "syscall_hook_manager_initialized"
+declaration = "static bool syscall_hook_manager_initialized;"
+if s.count(marker) != 2 or declaration in s:
+    raise SystemExit("Unexpected syscall hook manager source; manual review required")
+anchor = '#include "hook/syscall_event_bridge.h"\n'
+if s.count(anchor) != 1:
+    raise SystemExit("Cannot locate unique declaration anchor")
+s = s.replace(anchor, anchor + "\n" + declaration + "\n", 1)
+p.write_text(s)
+PY
+echo "COMPILE-ONLY: restored missing original Samsung state declaration" >> "$OUT_DIR/RESULT.md"
