@@ -73,3 +73,21 @@ Fetched files at immutable release tag `tiann/KernelSU@v3.3.1` and `snothin/Kern
 - Device evidence: SM-S9360 / `6.6.98-android15-8-p5a696e2-abogkiS9360ZCSCCZG1-4k`; on-device ksud reports `3.3.0 (uapi: 2)`, and `kernelsu` appears loaded in `/proc/modules`. Loaded LKM source version is still not independently established.
 
 Status: source-level discrepancy confirmed; no rebuilt or verified binaries.
+
+## UAPI 3–5 declaration audit (2026-10-13)
+
+Source inspection of `uapi/supercall.h` at immutable official `v3.3.1` and Samsung `kdp-s26` branch:
+
+| UAPI | Official header declaration | Fork status | Review implication |
+| --- | --- | --- | --- |
+| 3 | scoped su-session driver fd | Fork documents this upstream version but explicitly pins its own UAPI to 2 | Session semantics and userspace consumers require review |
+| 4 | `KSU_GET_INFO_FLAG_BUNDLED = (1U << 4)` | No equivalent flag in fork header | Capability reporting differs |
+| 5 | `EVENT_SERVICES = 4` with start/skip result | No declaration in fork header | Daemon lifecycle/event signaling differs |
+
+Official header: `4f6dc48df72393cf082ee7df87ba80a9e9b4d071`.
+Fork header: `e7f9bee70346a6fc166366d8b40ddd447b402c97`.
+The versions indicate an interface mismatch, **not proof of runtime incompatibility for every operation**. A full consumer/call-site audit and test matrix are still required.
+
+Decision: **BLOCKED for production upgrade**. Do not bump numeric UAPI alone; do not claim that updating Manager to build 32680 updates the running KernelSU module.
+
+This audit changes no executable source, module, or runtime behavior.
