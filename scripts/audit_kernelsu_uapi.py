@@ -45,12 +45,17 @@ def main():
     p.add_argument("--upstream", required=True, type=Path)
     p.add_argument("--fork", required=True, type=Path)
     p.add_argument("--output", default="build/ksu-uapi-audit", type=Path)
-    p.add_argument("--fail-on-mismatch", action="store_true", help="Return exit code 2 when source UAPI versions differ")
+    p.add_argument("--fail-on-mismatch", action="store_true", help="Return exit code 2 for source UAPI or checked feature mismatch")
     args = p.parse_args()
     upstream, fork = inspect(args.upstream), inspect(args.fork)
     mismatch = upstream["uapi"] != fork["uapi"]
+    tracked = ("uapi3_scoped_session_kernel", "bundled_flag", "uapi4_bundled_dispatch",
+               "services_event", "uapi5_services_dispatch", "uapi5_services_userspace")
+    missing_features = [key for key in tracked if upstream[key] is True and fork[key] is False]
+    blocked = mismatch or bool(missing_features)
     result = {"upstream": upstream, "fork": fork, "uapi_mismatch": mismatch,
-              "status": "BLOCKED" if mismatch else "REQUIRES_FURTHER_REVIEW"}
+              "missing_source_features": missing_features,
+              "status": "BLOCKED" if blocked else "REQUIRES_FURTHER_REVIEW"}
     args.output.mkdir(parents=True, exist_ok=True)
     (args.output / "report.json").write_text(json.dumps(result, indent=2) + "\n")
     rows = ["| Check | Official | GhostSam fork |", "|---|---|---|"]
@@ -65,7 +70,7 @@ def main():
     )
     (args.output / "report.md").write_text(report)
     print(report)
-    if args.fail_on_mismatch and mismatch:
+    if args.fail_on_mismatch and blocked:
         raise SystemExit(2)
     # Report remains available even when the compatibility gate fails.
 if __name__ == "__main__":
