@@ -51,7 +51,8 @@ jobs:
           python3 scripts/audit_kernelsu_uapi.py \
             --upstream upstream-kernelsu \
             --fork samsung-kernelsu \
-            --output build/ksu-uapi-audit
+            --output build/ksu-uapi-audit \
+            --fail-on-mismatch
       - name: Write job summary
         if: always()
         shell: bash
