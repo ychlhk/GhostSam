@@ -89,6 +89,23 @@ jobs:
           set -euo pipefail
           test -d "${ANDROID_HOME:-/usr/local/lib/android/sdk}"
           echo "Android SDK home: ${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+      - name: Generate ephemeral CI-only Android signing identity
+        shell: bash
+        working-directory: app
+        run: |
+          set -euo pipefail
+          keytool -genkeypair -noprompt -storetype PKCS12 \
+            -keystore ci-temporary.p12 -storepass ci-only-password \
+            -keypass ci-only-password -alias ci-temp \
+            -keyalg RSA -keysize 2048 -validity 2 \
+            -dname "CN=CI-only test identity"
+          cat > keystore.properties <<'EOF'
+          storeFile=ci-temporary.p12
+          storePassword=ci-only-password
+          keyAlias=ci-temp
+          keyPassword=ci-only-password
+          EOF
+          echo "Ephemeral build signing only; APK is not uploaded or released."
       - name: Compile and verify current assets (not a 3.3.1-enabled release)
         shell: bash
         working-directory: app
