@@ -21,6 +21,12 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Validate documented Samsung release blockers (read-only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/ksu-v3.3.1-release-gate.py
+
       - name: Verify official tag and release asset SHA-256
         shell: bash
         run: |
@@ -66,6 +72,7 @@ jobs:
             audit/reference-elf.txt
             audit/ghostsam-bundled-ksud-sha256.txt
             audit/RELEASE_GATE.txt
+            audit/samsung-release-gate.json
           if-no-files-found: warn
           retention-days: 14
 
