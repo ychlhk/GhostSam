@@ -122,6 +122,35 @@ jobs:
           ./gradlew --no-daemon :app:verifyPayloads :app:assembleDebug
           echo "Compilation validates the unchanged GhostSam app and old bundled payloads only."
           echo "The APK still bundles legacy GhostSam root payloads; this is NOT a KernelSU 32680 upgrade."
+      - name: Record bundled legacy Root payload provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p app/build/provenance
+          {
+            echo 'GhostSam build payload provenance — not a KernelSU 32680 upgrade'
+            echo 'The APK continues to carry unchanged legacy GhostSam Root components.'
+            echo 'This compilation does NOT validate or install the experimental 32680 LKM.'
+            echo 'Build commit: ${GITHUB_SHA}'
+            echo
+            echo 'Bundled ksud hashes:'
+            sha256sum app/app/src/main/assets/payloads/ksud/ksud \\
+                      app/app/src/main/assets/payloads/ksud/ksud-next
+            echo
+            echo 'Bundled android15-6.6 LKM hash:'
+            sha256sum app/app/src/main/assets/payloads/dirtyfrag/dfr_lkm-android15-6.6.ko
+            echo
+            echo 'APK hashes:'
+            find app/app/build/outputs/apk/debug -type f -name '*.apk' -exec sha256sum {} +
+          } > app/build/provenance/PAYLOAD_PROVENANCE.txt
+      - name: Upload text proof of bundled legacy payloads
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: GhostSam-debug-APK-bundled-payload-provenance-TEXT
+          path: app/build/provenance/PAYLOAD_PROVENANCE.txt
+          if-no-files-found: error
+          retention-days: 7
       - name: Upload explicitly labeled experimental APK (LEGACY ROOT PAYLOADS)
         if: success()
         uses: actions/upload-artifact@v4
