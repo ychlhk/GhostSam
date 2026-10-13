@@ -44,7 +44,9 @@ jobs:
         run: |
           git -C upstream-kernelsu rev-parse HEAD
           git -C samsung-kernelsu rev-parse HEAD
-      - name: Test audit script\n        run: python3 -m unittest discover -s tests -p 'test_ksu_uapi_audit.py' -v\n      - name: Run declaration-only audit
+      - name: Test audit script
+        run: python3 -m unittest discover -s tests -p 'test_ksu_uapi_audit.py' -v
+      - name: Run declaration-only audit
         run: |
           python3 scripts/audit_kernelsu_uapi.py \
             --upstream upstream-kernelsu \
