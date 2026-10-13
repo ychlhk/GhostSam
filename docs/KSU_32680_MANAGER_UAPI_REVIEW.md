@@ -11,6 +11,12 @@
 - Samsung reference **32601** commit: `snothin/KernelSU@0fde5f940559d36c48c9516902b3a7ce944a80c5`.
 - Verified phone baseline: `SM-S9360`, `6.6.98-android15-8-p5a696e2-abogkiS9360ZCSCCZG1-4k`, `ksud pre-sync-20260929-67-g9263f621 (uapi: 2)`.
 
+## Confirmed phone Manager (read-only terminal, 2026-10-13)
+
+Android package manager confirms installed `me.weishu.kernelsu`, `versionCode=32680`, `versionName=v3.3.0-79-g0c0fdb96`. Previous read-only probes reported working LKM `32601-2` and `ksud pre-sync-20260929-67-g9263f621 (uapi: 2)`.
+
+Official pinned 32680 Manager source expects UAPI 5, so a kernel-update or UAPI-mismatch warning is expected with the older running kernel. This is NOT evidence that the installed APK signature matches build defaults. Actual signer digest remains to be verified. A `dumpsys package | grep -m 2` "Broken pipe" is due to grep closing the pipe early, not a Root failure.
+
 ## Measured differences
 
 | Contract | Samsung reference | Official 32680 | Offline conclusion |
