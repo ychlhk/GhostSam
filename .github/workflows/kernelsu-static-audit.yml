@@ -46,7 +46,7 @@ jobs:
           git -C samsung-kernelsu rev-parse HEAD
       - name: Test audit script
         run: python3 -m unittest discover -s tests -p 'test_ksu_uapi_audit.py' -v
-      - name: Run declaration-only audit
+      - name: Run UAPI source audit
         run: |
           python3 scripts/audit_kernelsu_uapi.py \
             --upstream upstream-kernelsu \
