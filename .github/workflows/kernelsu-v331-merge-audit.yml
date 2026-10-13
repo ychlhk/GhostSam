@@ -1,0 +1,76 @@
+name: KernelSU v3.3.1 Samsung fork merge audit
+
+on:
+  push:
+    branches:
+      - upgrade/kernelsu-v3.3.1-static-review
+    paths:
+      - ".github/workflows/kernelsu-v331-merge-audit.yml"
+      - "docs/kernelsu-v3.3.1-upgrade-audit.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  merge-audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Inspect upstream merge feasibility in a throwaway clone
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="$RUNNER_TEMP/kernelsu-v331-review"
+          mkdir -p "$ROOT/reports"
+          REPORT="$ROOT/reports/source-merge-audit.md"
+          {
+            echo "# KernelSU v3.3.1 Samsung fork source merge audit"
+            echo
+            echo "This is a read-only Git integration trial. No binaries or APK are produced."
+            echo
+          } > "$REPORT"
+          git clone --quiet --filter=blob:none https://github.com/snothin/KernelSU.git "$ROOT/fork"
+          cd "$ROOT/fork"
+          git remote add official https://github.com/tiann/KernelSU.git
+          git fetch --quiet official refs/tags/v3.3.1
+          FORK_SHA="$(git rev-parse HEAD)"
+          UPSTREAM_SHA="$(git rev-parse FETCH_HEAD^{commit})"
+          UPSTREAM_AHEAD="$(git rev-list --count HEAD.."$UPSTREAM_SHA")"
+          FORK_AHEAD="$(git rev-list --count "$UPSTREAM_SHA"..HEAD)"
+          {
+            echo "- Upstream commit: \`$UPSTREAM_SHA\`"
+            echo "- Samsung fork commit: \`$FORK_SHA\`"
+            echo "- Upstream-only commits: **$UPSTREAM_AHEAD**"
+            echo "- Fork-only commits: **$FORK_AHEAD**"
+            echo
+            echo "## Local merge trial"
+          } >> "$REPORT"
+          git config user.name "KSU integration audit"
+          git config user.email "audit@users.noreply.github.com"
+          if git merge --no-commit --no-ff "$UPSTREAM_SHA" > "$ROOT/reports/merge.log" 2>&1; then
+            echo "Result: **clean merge trial** (not built or validated)." >> "$REPORT"
+            echo "status=clean" >> "$GITHUB_OUTPUT"
+          else
+            echo "Result: **merge conflicts or merge error** (requires manual review)." >> "$REPORT"
+            echo >> "$REPORT"
+            echo "### Unmerged paths" >> "$REPORT"
+            git diff --name-only --diff-filter=U | tee "$ROOT/reports/unmerged-paths.txt"
+            if [ -s "$ROOT/reports/unmerged-paths.txt" ]; then
+              sed 's/^/- \`/;s/$/\`/' "$ROOT/reports/unmerged-paths.txt" >> "$REPORT"
+            else
+              echo "(No unmerged paths found; see merge.log for other errors.)" >> "$REPORT"
+            fi
+            echo "status=conflict" >> "$GITHUB_OUTPUT"
+          fi
+          cat "$REPORT" | tee "$GITHUB_STEP_SUMMARY"
+          if grep -q 'status=conflict' "$GITHUB_OUTPUT"; then exit 1; fi
+
+      - name: Save audit evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernelsu-v331-source-merge-audit
+          path: ${{ runner.temp }}/kernelsu-v331-review/reports/
+          if-no-files-found: warn
+          retention-days: 14
