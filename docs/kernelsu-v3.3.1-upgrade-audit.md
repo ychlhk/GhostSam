@@ -14,6 +14,10 @@
 
 The actual `<kmi>_kernelsu.ko` is embedded in the Samsung fork's `ksud` from `userspace/ksud/bin/aarch64` (see `assets.rs` and `late_load.rs`). A valid upgrade must build the Samsung-compatible `android15-6.6_kernelsu.ko`, embed it into a matched `ksud`, and only then replace GhostSam's `payloads/ksud/ksud`.
 
+## SM-S9360 support boundary
+
+GhostSam `SeriesTable.kt` explicitly lists the S22, S26 and Z Fold8 Ghostlock series, **not** the SM-S9360. Its separate DirtyFrag path advertises `android15-6.6` KMI support, but that is not confirmation that this exact S25+ firmware is compatible with a rebuilt KernelSU core LKM. Treat device support as **unverified** until build-specific checks pass.
+
 ## Integration constraints
 
 Fork-specific delta includes `kernel/Kbuild`, Samsung KDP/DEFEX files, `kernel/feature/selinux_hide.c`, syscall hooks, `uapi/supercall.h`, and `userspace/ksud/src/{late_load,restorecon,utils}.rs`. Do not discard these changes when syncing upstream.
