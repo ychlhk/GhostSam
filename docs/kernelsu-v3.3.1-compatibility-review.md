@@ -55,3 +55,21 @@ GitHub Compare API: `tiann/KernelSU: v3.3.1` vs `snothin/KernelSU: kdp-s26`.
 - Review each upstream missing commit for dependencies/conflicts before choosing a merge/cherry-pick strategy. No merge or payload replacement has been performed.
 
 Comparison URL: https://github.com/tiann/KernelSU/compare/v3.3.1...snothin:KernelSU:kdp-s26
+
+## Source-level protocol blocker verified (2026-10-13)
+
+Fetched files at immutable release tag `tiann/KernelSU@v3.3.1` and `snothin/KernelSU@kdp-s26`:
+
+| Item | Samsung fork | Official v3.3.1 |
+| --- | --- | --- |
+| `uapi/supercall.h` blob SHA | `e7f9bee70346a6fc166366d8b40ddd447b402c97` | `4f6dc48df72393cf082ee7df87ba80a9e9b4d071` |
+| `KERNEL_SU_UAPI_VERSION` | **2**, comment explicitly pins to v3.3.0 Manager | **5**, with comments for newly introduced UAPI 4 and 5 |
+| `kernel/Kbuild` blob SHA | `48f7a46560dc4fe68cdd464daa419febf4b40ed4` | `6c92a0130cdc796b137292d4dd107fe960d90e1d` |
+
+- Samsung fork builds `compat/samsung_kdp.o` and `compat/samsung_defex.o`; the official release's Kbuild does not include those entries.
+- Fork `userspace/ksud/src/late_load.rs` contains custom daemon staging and a KMI-selected module loading path; the fork is not just a relabeled upstream release.
+- **BLOCKER:** it is unsafe to infer that an upstream v3.3.1 userspace binary can be paired with the fork's UAPI 2 kernel without protocol tests.
+- Next review: map each upstream UAPI 3/4/5 change against fork consumers and firmware-specific build dependencies, then evaluate a consistent source revision. Do not merely edit the UAPI number to 5.
+- Device evidence: SM-S9360 / `6.6.98-android15-8-p5a696e2-abogkiS9360ZCSCCZG1-4k`; on-device ksud reports `3.3.0 (uapi: 2)`, and `kernelsu` appears loaded in `/proc/modules`. Loaded LKM source version is still not independently established.
+
+Status: source-level discrepancy confirmed; no rebuilt or verified binaries.
