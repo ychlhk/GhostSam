@@ -15,7 +15,21 @@ def inspect(root):
     match = re.search(r"\bKERNEL_SU_UAPI_VERSION\s*=\s*(\d+)\s*;", h)
     if not match:
         raise SystemExit(f"No UAPI version found in {header}")
+    dispatch_file = root / "kernel" / "supercall" / "dispatch.c"
+    supercall_file = root / "kernel" / "supercall" / "supercall.c"
+    calls_file = root / "userspace" / "ksud" / "src" / "ksucalls.rs"
+    dispatch = dispatch_file.read_text() if dispatch_file.is_file() else ""
+    supercall = supercall_file.read_text() if supercall_file.is_file() else ""
+    calls = calls_file.read_text() if calls_file.is_file() else ""
     return {
+        "uapi3_scoped_session_kernel": (
+            "ksu_install_su_fd(" in supercall
+            and "ksu_is_su_session_fd(" in supercall
+            and "allow_su_session" in dispatch
+        ) if dispatch and supercall else None,
+        "uapi4_bundled_dispatch": "KSU_GET_INFO_FLAG_BUNDLED" in dispatch if dispatch else None,
+        "uapi5_services_dispatch": "case EVENT_SERVICES:" in dispatch if dispatch else None,
+        "uapi5_services_userspace": "EVENT_SERVICES" in calls if calls else None,
         "uapi": int(match.group(1)),
         "header_sha256": hashlib.sha256(header.read_bytes()).hexdigest(),
         "kbuild_sha256": hashlib.sha256(kbuild.read_bytes()).hexdigest(),
@@ -40,7 +54,7 @@ def main():
     args.output.mkdir(parents=True, exist_ok=True)
     (args.output / "report.json").write_text(json.dumps(result, indent=2) + "\n")
     rows = ["| Check | Official | GhostSam fork |", "|---|---|---|"]
-    for key in ("uapi", "bundled_flag", "services_event", "samsung_kdp_object", "samsung_defex_object", "header_sha256", "kbuild_sha256"):
+    for key in ("uapi", "bundled_flag", "services_event", "samsung_kdp_object", "samsung_defex_object", "header_sha256", "kbuild_sha256", "uapi3_scoped_session_kernel", "uapi4_bundled_dispatch", "uapi5_services_dispatch", "uapi5_services_userspace"):
         rows.append(f"| `{key}` | `{upstream[key]}` | `{fork[key]}` |")
     report = (
         "# KernelSU source compatibility audit\n\n"
