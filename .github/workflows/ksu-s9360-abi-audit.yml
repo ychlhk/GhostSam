@@ -2,7 +2,7 @@ name: SM-S9360 KernelSU experimental module ABI audit (NO INSTALL)
 
 on:
   push:
-    branches: [ksu-32680-compat]
+    branches: [ksu-32680-compat, ksu-3.3.1-compat]
     paths:
       - '.github/workflows/ksu-s9360-abi-audit.yml'
   workflow_dispatch:
@@ -76,6 +76,24 @@ jobs:
             echo
             echo '## Symbol version section presence'
             readelf -S kernelsu.ko | grep -E '__versions|__version_ext|\.modinfo' || true
+            echo
+            echo '## Debug/type metadata capabilities'
+            readelf -S -W kernelsu.ko | grep -E '\\.(BTF|debug_info|debug_abbrev|debug_str)|__versions|__version_ext' || true
+            echo
+            echo '## Compiler-visible structure type diagnostics'
+            if readelf -S -W kernelsu.ko | grep -qE '\\.debug_info|\\.BTF'; then
+              echo 'Type debug section detected. A matching generic reference build still does not establish device layout parity.'
+              if command -v llvm-dwarfdump >/dev/null 2>&1; then
+                llvm-dwarfdump --statistics kernelsu.ko 2>&1 || true
+              fi
+            else
+              echo 'No DWARF/BTF type section detected. Full layout comparison is not possible with this binary.'
+            fi
+            echo
+            echo '## Target BTF evidence (independently supplied)'
+            echo 'Target BTF SHA256: d66603646376671fc567fd73b67dc877d0c2242ec05472b6b914ca4a645fddca'
+            echo 'Target BTF size: 6387446 bytes; see docs/SM_S9360_BTF_LAYOUT_EVIDENCE.md'
+            echo 'Target BTF is intentionally not bundled in public CI artifacts.'
             echo
             echo '## Result: BLOCKED for device installation'
             echo 'No device-matching Module.symvers, vendor private exports, or vermagic compatibility test was supplied.'
