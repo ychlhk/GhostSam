@@ -34,7 +34,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: snothin/KernelSU
-          ref: kdp-s26
+          ref: 0fde5f940559d36c48c9516902b3a7ce944a80c5
           path: samsung-kernelsu
           persist-credentials: false
       - name: Record source revision identifiers
@@ -42,7 +42,7 @@ jobs:
         run: |
           git -C upstream-kernelsu rev-parse HEAD
           git -C samsung-kernelsu rev-parse HEAD
-      - name: Run declaration-only audit
+      - name: Test audit script\n        run: python3 -m unittest discover -s tests -p 'test_ksu_uapi_audit.py' -v\n      - name: Run declaration-only audit
         run: |
           python3 scripts/audit_kernelsu_uapi.py \
             --upstream upstream-kernelsu \
