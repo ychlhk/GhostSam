@@ -144,6 +144,29 @@ jobs:
             echo 'A zero direct hit is NOT sufficient: implicit offsets, macros and runtime symbol hooks can still depend on layout.'
             echo 'This scan does NOT certify ABI, exported CRCs, or Samsung KDP/DEFEX compatibility.'
           } > ../../abi-audit/TASK_STRUCT_SOURCE_REFERENCES.txt
+          # Analyze unresolved external symbols and Samsung-specific source
+          # references. Metadata only; no module binaries in artifacts.
+          {
+            echo '# KDP/DEFEX and external symbol review (GENERIC DDK ONLY)'
+            echo 'Target CRC parity cannot be established without exact firmware exports.'
+            echo
+            echo '## Unresolved module symbols'
+            if command -v llvm-nm >/dev/null 2>&1; then
+              llvm-nm -u kernelsu.ko | sort -u
+            else
+              nm -u kernelsu.ko | sort -u
+            fi
+            echo
+            echo '## Symbol version metadata'
+            readelf -SW kernelsu.ko | grep -E '__versions|__version_ext' || true
+            echo
+            echo '## Samsung source references: external helper / vendor API patterns'
+            grep -RnE --include='*.c' --include='*.h' '(kdp|defex|security_task|prepare_creds|commit_creds|override_creds|task_struct|kallsyms)' compat/samsung_kdp.c compat/samsung_defex.c | head -n 250 || true
+            echo
+            echo '## Review decision'
+            echo 'UNVERIFIED: generic DDK symbol tables and module __versions do not certify CRC parity with target Samsung firmware.'
+            echo 'UNVERIFIED: Samsung KDP/DEFEX runtime and late-load behavior.'
+          } > ../../abi-audit/SAMSUNG_SYMBOL_DEPENDENCIES.txt
           # Deliberately do not copy or upload kernelsu.ko.
       - name: Upload metadata and blockers only
         if: always()
