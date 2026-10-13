@@ -41,3 +41,17 @@ Date: 2026-10-13
 - [ ] Device testing
 
 **No claim that GhostSam has been upgraded is made by this document.**
+
+## Verified cross-fork comparison (2026-10-13)
+
+GitHub Compare API: `tiann/KernelSU: v3.3.1` vs `snothin/KernelSU: kdp-s26`.
+
+- Status: `diverged`.
+- Fork ahead by **6** commits, behind upstream tag by **56** commits.
+- Upstream release commit: `0c0fdb960178fa12d80d6cbcfdcb6ad8be6a865d`.
+- Merge base: `58aecc40a6eebc677ec82cf8d6ca5bf5d18f2a4d`.
+- Compare reports 19 changed file paths, including Samsung-specific `kernel/compat/samsung_defex.*`, `kernel/compat/samsung_kdp.c`, `kernel/include/ksu_samsung_kdp.h`, kernel core/hooks, `uapi/supercall.h`, and `userspace/ksud/src/late_load.rs`, `restorecon.rs`, `utils.rs`.
+- This is **not** evidence that current built artifacts are compatible with v3.3.1.
+- Review each upstream missing commit for dependencies/conflicts before choosing a merge/cherry-pick strategy. No merge or payload replacement has been performed.
+
+Comparison URL: https://github.com/tiann/KernelSU/compare/v3.3.1...snothin:KernelSU:kdp-s26
