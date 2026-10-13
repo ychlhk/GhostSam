@@ -84,8 +84,12 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Check preinstalled Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -d "${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          echo "Android SDK home: ${ANDROID_HOME:-/usr/local/lib/android/sdk}"
       - name: Compile and verify current assets (not a 3.3.1-enabled release)
         shell: bash
         working-directory: app
