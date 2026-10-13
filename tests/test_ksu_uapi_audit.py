@@ -99,5 +99,33 @@ class AuditTest(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertTrue((output / "report.json").is_file())
 
+
+    def test_optional_callsite_inspection(self):
+        self.write("static const __u32 KERNEL_SU_UAPI_VERSION = 5;\n")
+        (self.root / "kernel" / "supercall").mkdir()
+        (self.root / "userspace" / "ksud" / "src").mkdir(parents=True)
+        (self.root / "kernel" / "supercall" / "supercall.c").write_text(
+            "int ksu_install_su_fd(void); bool ksu_is_su_session_fd(void);\n"
+        )
+        (self.root / "kernel" / "supercall" / "dispatch.c").write_text(
+            "allow_su_session; KSU_GET_INFO_FLAG_BUNDLED; case EVENT_SERVICES: break;\n"
+        )
+        (self.root / "userspace" / "ksud" / "src" / "ksucalls.rs").write_text(
+            "event: ksu_uapi::EVENT_SERVICES,\n"
+        )
+        out = audit.inspect(self.root)
+        self.assertTrue(out["uapi3_scoped_session_kernel"])
+        self.assertTrue(out["uapi4_bundled_dispatch"])
+        self.assertTrue(out["uapi5_services_dispatch"])
+        self.assertTrue(out["uapi5_services_userspace"])
+
+    def test_unavailable_optional_files_are_unknown(self):
+        self.write("static const __u32 KERNEL_SU_UAPI_VERSION = 2;\n")
+        out = audit.inspect(self.root)
+        self.assertIsNone(out["uapi3_scoped_session_kernel"])
+        self.assertIsNone(out["uapi4_bundled_dispatch"])
+        self.assertIsNone(out["uapi5_services_dispatch"])
+        self.assertIsNone(out["uapi5_services_userspace"])
+
 if __name__ == "__main__":
     unittest.main()
