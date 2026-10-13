@@ -124,6 +124,26 @@ jobs:
               fi
             fi
           } > ../../abi-audit/TYPE_LAYOUTS.txt
+          # Source-level field dependency audit for known Samsung task_struct drift.
+          # Search references, not just definitions; matches still require manual review.
+          {
+            echo '# Samsung task_struct ABI drift: source reference scan'
+            echo
+            echo 'Known device-specific member: android_vendor_data2 at offset 3568.'
+            echo 'Generic reference omits it; kretprobe_instances shifts 8 bytes.'
+            echo
+            echo '## Relevant field references in merged kernel source'
+            for member in android_vendor_data2 kretprobe_instances android_kabi_reserved2 android_kabi_reserved3 android_kabi_reserved4 android_kabi_reserved5 android_kabi_reserved6 android_kabi_reserved7 android_kabi_reserved8; do
+              echo "===== ${member} ====="
+              grep -RnFw --include='*.c' --include='*.h' "${member}" . | head -n 100 || true
+              echo
+            done
+            echo '## All task_struct mentions for manual data-flow review'
+            grep -RnE --include='*.c' --include='*.h' '(struct[[:space:]]+task_struct|task_struct[[:space:]]*\\*)' . | head -n 250 || true
+            echo
+            echo 'A zero direct hit is NOT sufficient: implicit offsets, macros and runtime symbol hooks can still depend on layout.'
+            echo 'This scan does NOT certify ABI, exported CRCs, or Samsung KDP/DEFEX compatibility.'
+          } > ../../abi-audit/TASK_STRUCT_SOURCE_REFERENCES.txt
           # Deliberately do not copy or upload kernelsu.ko.
       - name: Upload metadata and blockers only
         if: always()
