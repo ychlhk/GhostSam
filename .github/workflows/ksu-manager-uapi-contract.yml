@@ -1,0 +1,64 @@
+name: KernelSU 32601 versus 32680 Manager UAPI contract (NO INSTALL)
+
+on:
+  push:
+    branches: [ksu-32680-compat]
+    paths:
+      - '.github/workflows/ksu-manager-uapi-contract.yml'
+      - 'scripts/ksu-manager-uapi-contract.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  manager-uapi-review:
+    name: Audit pinned UAPI, Manager gating and signature source contracts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout GhostSam isolated source-audit scripts
+        uses: actions/checkout@v4
+        with:
+          path: control
+          persist-credentials: false
+      - name: Checkout pinned official KernelSU 32680
+        uses: actions/checkout@v4
+        with:
+          repository: tiann/KernelSU
+          ref: 0c0fdb960178fa12d80d6cbcfdcb6ad8be6a865d
+          path: official
+          persist-credentials: false
+      - name: Checkout pinned Samsung KernelSU reference (UAPI 2)
+        uses: actions/checkout@v4
+        with:
+          repository: snothin/KernelSU
+          ref: 0fde5f940559d36c48c9516902b3a7ce944a80c5
+          path: samsung
+          persist-credentials: false
+      - name: Generate Manager UAPI and signature-path report, no binary execution
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 control/scripts/ksu-manager-uapi-contract.py \
+            --official official \
+            --samsung samsung \
+            --output review
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          x=json.loads(Path("review/manager-uapi-contract.json").read_text())
+          # This is a source gate only; no CI success is a runtime certification.
+          assert x["runtime_compatible"] is False
+          assert x["uapi"]["official_version"] == 5
+          assert x["uapi"]["samsung_version"] == 2
+          assert x["static_checks_passed"], "Some source invariants failed; see report"
+          PY
+      - name: Upload source-only audit report, not APK, daemon or LKM
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ksu-32680-manager-uapi-source-audit-TEXT-ONLY
+          path: review/
+          if-no-files-found: warn
+          retention-days: 14
