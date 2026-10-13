@@ -31,6 +31,7 @@ def main():
     p.add_argument("--upstream", required=True, type=Path)
     p.add_argument("--fork", required=True, type=Path)
     p.add_argument("--output", default="build/ksu-uapi-audit", type=Path)
+    p.add_argument("--fail-on-mismatch", action="store_true", help="Return exit code 2 when source UAPI versions differ")
     args = p.parse_args()
     upstream, fork = inspect(args.upstream), inspect(args.fork)
     mismatch = upstream["uapi"] != fork["uapi"]
@@ -50,6 +51,8 @@ def main():
     )
     (args.output / "report.md").write_text(report)
     print(report)
-    # Observation-only workflow: incompatibility is reported, not concealed.
+    if args.fail_on_mismatch and mismatch:
+        raise SystemExit(2)
+    # Report remains available even when the compatibility gate fails.
 if __name__ == "__main__":
     main()
