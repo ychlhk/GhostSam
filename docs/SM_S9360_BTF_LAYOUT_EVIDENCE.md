@@ -44,3 +44,15 @@ These are reported for forensic comparison only. Do not hardcode or apply offset
 - Follow-up: prepare a debug-information-enabled, compile-only module build and extract text-based type metadata; obtain exact-firmware export CRCs independently. Do not publish or install module binaries solely from this audit.
 
 **Release remains BLOCKED.**
+
+## DWARF/BTF-enabled experimental module build (2026-10-13)
+
+- [GitHub Actions run #38335088957](https://github.com/ychlhk/GhostSam/actions/runs/38335088957) completed **successfully** with compile-only `KCFLAGS=-g`.
+- [Text ABI metadata artifact #11784229093](https://github.com/ychlhk/GhostSam/actions/runs/38335088957/artifacts/11784229093) was downloaded and inspected.
+- Actual `readelf -S -W` report confirms `.debug_info`, `.debug_abbrev`, `.debug_str`, and `.BTF` in the experimental `kernelsu.ko`.
+- Report also lists `__versions` with **zero section size**. This must not be interpreted as demonstrated module symbol CRC parity.
+- DWARF statistics show 664 functions and 3034 unique source variables, establishing the presence of useful compiler-emitted debugging data, **not** Samsung target compatibility.
+- The artifact contains text reports, **not the module ELF or extracted per-type layouts**. Therefore an actual field-by-field comparison against the uploaded target BTF is still outstanding.
+- Next offline gate: produce structured, text-only DWARF/BTF type-layout metadata from the experimental module and compare relevant types to the independently supplied SM-S9360 BTF; separately acquire firmware-matching module export CRC evidence.
+
+**Installation verdict: BLOCKED.** Existing 32601 device Root and production `main` remain unchanged.
