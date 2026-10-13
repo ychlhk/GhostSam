@@ -1,0 +1,64 @@
+name: KernelSU v3.3.1 static UAPI audit
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - upgrade/kernelsu-v3.3.1-static-review
+    paths:
+      - '.github/workflows/kernelsu-static-audit.yml'
+      - 'scripts/audit_kernelsu_uapi.py'
+  pull_request:
+    paths:
+      - '.github/workflows/kernelsu-static-audit.yml'
+      - 'scripts/audit_kernelsu_uapi.py'
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout GhostSam
+        uses: actions/checkout@v4
+      - name: Checkout official KernelSU v3.3.1
+        uses: actions/checkout@v4
+        with:
+          repository: tiann/KernelSU
+          ref: 0c0fdb960178fa12d80d6cbcfdcb6ad8be6a865d
+          path: upstream-kernelsu
+          persist-credentials: false
+      - name: Checkout Samsung KernelSU fork
+        uses: actions/checkout@v4
+        with:
+          repository: snothin/KernelSU
+          ref: kdp-s26
+          path: samsung-kernelsu
+          persist-credentials: false
+      - name: Record source revision identifiers
+        shell: bash
+        run: |
+          git -C upstream-kernelsu rev-parse HEAD
+          git -C samsung-kernelsu rev-parse HEAD
+      - name: Run declaration-only audit
+        run: |
+          python3 scripts/audit_kernelsu_uapi.py \
+            --upstream upstream-kernelsu \
+            --fork samsung-kernelsu \
+            --output build/ksu-uapi-audit
+      - name: Write job summary
+        if: always()
+        shell: bash
+        run: |
+          if test -f build/ksu-uapi-audit/report.md; then
+            cat build/ksu-uapi-audit/report.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Upload audit results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernelsu-static-audit
+          path: build/ksu-uapi-audit/
+          if-no-files-found: warn
