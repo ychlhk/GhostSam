@@ -1,0 +1,97 @@
+name: KernelSU v3.3.1 provenance and GhostSam package audit (NO INSTALL)
+
+on:
+  push:
+    branches: [ksu-3.3.1-compat]
+    paths:
+      - '.github/workflows/ksu-v3.3.1-provenance.yml'
+      - 'docs/KERNELSU_V3_3_1_GHOSTSAM_STATUS.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit-reference:
+    name: Verify tagged 32680 source and published ARM64 ksud (read-only)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout GhostSam audit branch
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Verify official tag and release asset SHA-256
+        shell: bash
+        run: |
+          set -euo pipefail
+          readonly EXPECTED_COMMIT=0c0fdb960178fa12d80d6cbcfdcb6ad8be6a865d
+          readonly EXPECTED_DIGEST=049491e2b4cc0a6c913d3920cb90b8c94c9e8ca96c0ee92818293304973bfb1b
+          readonly RELEASE=https://github.com/tiann/KernelSU/releases/download/v3.3.1/ksud-aarch64-linux-android
+          mkdir -p audit
+          tag_commit=$(git ls-remote https://github.com/tiann/KernelSU.git refs/tags/v3.3.1 | awk '{print $1}')
+          test "$tag_commit" = "$EXPECTED_COMMIT" || { echo "Unexpected upstream v3.3.1 tag"; exit 1; }
+          curl --fail --location --retry 3 --silent --show-error \
+            https://api.github.com/repos/tiann/KernelSU/releases/tags/v3.3.1 -o audit/release.json
+          test "$(jq -r .tag_name audit/release.json)" = v3.3.1
+          digest=$(jq -r '.assets[] | select(.name == "ksud-aarch64-linux-android") | .digest' audit/release.json)
+          test "$digest" = "sha256:$EXPECTED_DIGEST" || { echo "Unexpected official release digest"; exit 1; }
+          curl --fail --location --retry 3 --silent --show-error "$RELEASE" -o /tmp/ksud-v3.3.1-reference
+          printf '%s  %s\n' "$EXPECTED_DIGEST" /tmp/ksud-v3.3.1-reference | sha256sum -c -
+          readelf -h /tmp/ksud-v3.3.1-reference | tee audit/reference-elf.txt
+          grep -E 'Machine:[[:space:]]+AArch64' audit/reference-elf.txt
+          sha256sum app/app/src/main/assets/payloads/ksud/ksud \
+                    app/app/src/main/assets/payloads/ksud/ksud-next \
+            | tee audit/ghostsam-bundled-ksud-sha256.txt
+          test "$(sha256sum app/app/src/main/assets/payloads/ksud/ksud | cut -d' ' -f1)" != "$EXPECTED_DIGEST" || {
+            echo "Unexpected matching embedded asset; review release provenance"; exit 1;
+          }
+          cat > audit/RELEASE_GATE.txt <<EOF
+          OFFICIAL VERSION: v3.3.1, manager versionCode 32680
+          UPSTREAM TAG COMMIT: $EXPECTED_COMMIT
+          VERIFIED OFFICIAL ARM64 KSUD SHA256: $EXPECTED_DIGEST
+          GHOSTSAM BUNDLED KSUD: DIFFERENT (see companion SHA256 report)
+          OFFICIAL KSUD IS NOT THE SAMSUNG-GHOSTSAM FORK; DO NOT REPLACE BLINDLY.
+          RESULT: SOURCE/ASSET PROVENANCE CHECK ONLY. NOT A SAMSUNG PORT.
+          NO KERNEL MODULE LOAD, NO BINARY PATCH, NO FLASH, NO DEVICE INSTALL.
+          EOF
+          rm -f /tmp/ksud-v3.3.1-reference
+
+      - name: Upload text-only checks (exclude reference binaries)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernelsu-v3.3.1-source-and-asset-audit-TEXT-ONLY
+          path: |
+            audit/reference-elf.txt
+            audit/ghostsam-bundled-ksud-sha256.txt
+            audit/RELEASE_GATE.txt
+          if-no-files-found: warn
+          retention-days: 14
+
+  build-ghostsam:
+    name: Build existing GhostSam manager without replacing root payloads
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Checkout GhostSam audit branch
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+      - name: Compile and verify current assets (not a 3.3.1-enabled release)
+        shell: bash
+        working-directory: app
+        run: |
+          set -euo pipefail
+          chmod +x ./gradlew
+          ./gradlew --no-daemon :app:verifyPayloads :app:assembleDebug
+          echo "Compilation validates the unchanged GhostSam app and old bundled payloads only."
+          echo "The APK is NOT verified with a Samsung KernelSU v3.3.1 LKM/daemon and is not distributed here."
