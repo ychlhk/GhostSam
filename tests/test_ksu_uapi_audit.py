@@ -127,5 +127,36 @@ class AuditTest(unittest.TestCase):
         self.assertIsNone(out["uapi5_services_dispatch"])
         self.assertIsNone(out["uapi5_services_userspace"])
 
+
+    def test_same_version_missing_feature_is_blocked(self):
+        import subprocess
+        import sys
+        import json
+        upstream = self.root / "feature_upstream"
+        fork = self.root / "feature_fork"
+        for source in (upstream, fork):
+            (source / "uapi").mkdir(parents=True)
+            (source / "kernel" / "supercall").mkdir(parents=True)
+            (source / "uapi" / "supercall.h").write_text(
+                "static const __u32 KERNEL_SU_UAPI_VERSION = 5;\n"
+            )
+            (source / "kernel" / "Kbuild").write_text("kernelsu-objs := core/init.o\n")
+        (upstream / "kernel" / "supercall" / "dispatch.c").write_text(
+            "cmd.flags |= KSU_GET_INFO_FLAG_BUNDLED;\n"
+        )
+        (fork / "kernel" / "supercall" / "dispatch.c").write_text(
+            "/* feature absent */\n"
+        )
+        output = self.root / "feature_report"
+        proc = subprocess.run(
+            [sys.executable, str(SCRIPT), "--upstream", str(upstream),
+             "--fork", str(fork), "--output", str(output), "--fail-on-mismatch"],
+            capture_output=True, text=True,
+        )
+        self.assertEqual(proc.returncode, 2, proc.stderr)
+        report = json.loads((output / "report.json").read_text())
+        self.assertEqual(report["status"], "BLOCKED")
+        self.assertIn("uapi4_bundled_dispatch", report["missing_source_features"])
+
 if __name__ == "__main__":
     unittest.main()
