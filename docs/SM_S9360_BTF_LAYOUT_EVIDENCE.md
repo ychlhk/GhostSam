@@ -33,3 +33,14 @@ These are reported for forensic comparison only. Do not hardcode or apply offset
 - The live KernelSU module reports version **32601**, UAPI **2**, LKM mode and late-load. The experimental target is **32680**, UAPI **5**.
 - **No full layout comparison with the experimental 32680 build's BTF, target exported CRC parity, KDP/DEFEX runtime verification, or loader compatibility validation was completed here.**
 - **Verdict: type metadata extracted successfully; Samsung 32680 LKM/ksud installation remains BLOCKED.** This document is an evidence snapshot, not a working port or an install guide.
+
+## Experimental 32680 LKM CI result (2026-10-13)
+
+- [GitHub Actions run #38334319543](https://github.com/ychlhk/GhostSam/actions/runs/38334319543) **success** for a generic GKI compile and ABI metadata collection.
+- [ABI report artifact #11783449831](https://github.com/ychlhk/GhostSam/actions/runs/38334319543/artifacts/11783449831) was downloaded and inspected.
+- The final `kernelsu.ko` ELF contains `__versions`, but **no retained `.BTF` or `.debug_info` type section** according to `readelf -S -W`.
+- The build emitted `BTF [M]` during module generation, but that alone does not establish that type metadata survived in the final module ELF.
+- Consequently **no complete reference-to-device field-layout parity test has run**; any claim that the target is ABI-compatible would be premature.
+- Follow-up: prepare a debug-information-enabled, compile-only module build and extract text-based type metadata; obtain exact-firmware export CRCs independently. Do not publish or install module binaries solely from this audit.
+
+**Release remains BLOCKED.**
