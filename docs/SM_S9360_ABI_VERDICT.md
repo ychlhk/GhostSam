@@ -67,3 +67,17 @@ Do not publish identifiers beyond these build-related fields without reviewing f
 ## Release decision
 
 **Not installable / not flashable** as tested. The existing Samsung KernelSU LKM and `ksud` remain untouched. Never use `insmod --force`, modify a version string to masquerade as a match, or replace the phone's working daemon to paper over this mismatch.
+
+## Confirmed exact production build metadata (read-only, 2026-10-13)
+
+- Fingerprint: `samsung/pa2qzcx/pa2q:16/BP4A.251205.006/S9360ZCSCCZG1_CHCCCZG1:user/release-keys`.
+- Android security patch: `2026-07-05`.
+- Bootloader: `S9360ZCSCCZG1`.
+- Kernel release: `6.6.98-android15-8-p5a696e2-abogkiS9360ZCSCCZG1-4k`.
+- Compiler: Android Clang 18.0.0, toolchain build `11368308`, LLVM revision `477610d4d0d988e69dbc3fae4fe86bff3f07f2b5`; kernel built Wed Jul 8 09:14:14 UTC 2026.
+- Live module reports `version: 32601`, `uapi_version: 2`, `lkm: true`, `runtime_mode: late-load` via `ksud debug info`. The installed userspace `ksud` reports `uapi: 2`; Manager package reports `versionCode=32680`.
+- Live `/proc/modules`: `kernelsu 180224 0 - Live ... (O)`.
+
+**Interpretation:** this confirms the actual on-device LKM is KernelSU 32601, not the experimental 32680. The 32680 Manager package is not evidence of a 32680 LKM. The exact target `Module.symvers` and exported symbol CRCs have not been obtained. The generic GKI reference ELF is not approved for the device.
+
+**Source lookup (2026-10-13):** Samsung provides an official mobile source Release Center: https://opensource.samsung.com/uploadList?classification1=mobile_phone&menuItem=mobile . The public search results checked did not independently verify a matching `S9360ZCSCCZG1` source archive. This absence of a verified match is not proof the archive does not exist. Request the exact version from Samsung if unavailable in the Release Center. Linux Kbuild documentation describes `Module.symvers` and per-symbol CRC checks: https://docs.kernel.org/kbuild/modules.html .
