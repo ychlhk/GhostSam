@@ -54,5 +54,28 @@ class AuditTest(unittest.TestCase):
         with self.assertRaises(SystemExit):
             audit.inspect(self.root)
 
+
+    def test_mismatched_uapi_fails_when_gate_enabled(self):
+        import subprocess
+        import sys
+        upstream = self.root / "upstream"
+        fork = self.root / "fork"
+        for source, version in ((upstream, 5), (fork, 2)):
+            (source / "uapi").mkdir(parents=True)
+            (source / "kernel").mkdir()
+            (source / "uapi" / "supercall.h").write_text(
+                f"static const __u32 KERNEL_SU_UAPI_VERSION = {version};\\n".replace("\\n", "\n")
+            )
+            (source / "kernel" / "Kbuild").write_text("kernelsu-objs := core/init.o\n")
+        output = self.root / "report"
+        proc = subprocess.run(
+            [sys.executable, str(SCRIPT), "--upstream", str(upstream),
+             "--fork", str(fork), "--output", str(output), "--fail-on-mismatch"],
+            capture_output=True, text=True, check=False,
+        )
+        self.assertEqual(proc.returncode, 2, proc.stderr)
+        self.assertTrue((output / "report.json").is_file())
+        self.assertTrue((output / "report.md").is_file())
+
 if __name__ == "__main__":
     unittest.main()
