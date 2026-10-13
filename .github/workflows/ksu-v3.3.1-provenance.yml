@@ -121,4 +121,12 @@ jobs:
           chmod +x ./gradlew
           ./gradlew --no-daemon :app:verifyPayloads :app:assembleDebug
           echo "Compilation validates the unchanged GhostSam app and old bundled payloads only."
-          echo "The APK is NOT verified with a Samsung KernelSU v3.3.1 LKM/daemon and is not distributed here."
+          echo "The APK still bundles legacy GhostSam root payloads; this is NOT a KernelSU 32680 upgrade."
+      - name: Upload explicitly labeled experimental APK (LEGACY ROOT PAYLOADS)
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: GhostSam-experimental-debug-APK-LEGACY-32601-NOT-KSU32680
+          path: app/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 7
