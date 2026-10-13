@@ -8,10 +8,12 @@ on:
     paths:
       - '.github/workflows/kernelsu-static-audit.yml'
       - 'scripts/audit_kernelsu_uapi.py'
+      - 'tests/test_ksu_uapi_audit.py'
   pull_request:
     paths:
       - '.github/workflows/kernelsu-static-audit.yml'
       - 'scripts/audit_kernelsu_uapi.py'
+      - 'tests/test_ksu_uapi_audit.py'
 
 permissions:
   contents: read
