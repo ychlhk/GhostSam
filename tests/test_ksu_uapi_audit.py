@@ -64,7 +64,7 @@ class AuditTest(unittest.TestCase):
             (source / "uapi").mkdir(parents=True)
             (source / "kernel").mkdir()
             (source / "uapi" / "supercall.h").write_text(
-                f"static const __u32 KERNEL_SU_UAPI_VERSION = {version};\\n".replace("\\n", "\n")
+                f"static const __u32 KERNEL_SU_UAPI_VERSION = {version};\n"
             )
             (source / "kernel" / "Kbuild").write_text("kernelsu-objs := core/init.o\n")
         output = self.root / "report"
@@ -76,6 +76,28 @@ class AuditTest(unittest.TestCase):
         self.assertEqual(proc.returncode, 2, proc.stderr)
         self.assertTrue((output / "report.json").is_file())
         self.assertTrue((output / "report.md").is_file())
+
+
+    def test_matching_uapi_gate_does_not_fail(self):
+        import subprocess
+        import sys
+        upstream = self.root / "matched_upstream"
+        fork = self.root / "matched_fork"
+        for source in (upstream, fork):
+            (source / "uapi").mkdir(parents=True)
+            (source / "kernel").mkdir()
+            (source / "uapi" / "supercall.h").write_text(
+                "static const __u32 KERNEL_SU_UAPI_VERSION = 5;\\n".replace("\\n", "\n")
+            )
+            (source / "kernel" / "Kbuild").write_text("kernelsu-objs := core/init.o\n")
+        output = self.root / "matched_report"
+        proc = subprocess.run(
+            [sys.executable, str(SCRIPT), "--upstream", str(upstream),
+             "--fork", str(fork), "--output", str(output), "--fail-on-mismatch"],
+            capture_output=True, text=True, check=False,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertTrue((output / "report.json").is_file())
 
 if __name__ == "__main__":
     unittest.main()
