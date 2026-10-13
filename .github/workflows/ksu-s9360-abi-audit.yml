@@ -99,6 +99,31 @@ jobs:
             echo 'No device-matching Module.symvers, vendor private exports, or vermagic compatibility test was supplied.'
             echo 'A generic DDK compilation is insufficient to validate Samsung KDP/DEFEX or loader compatibility.'
           } > ../../abi-audit/ABI_REPORT.txt 2>&1
+          # Export text-only type layouts for offline comparison with the owner's BTF.
+          # Do not include the ELF, module binary, or executable payloads.
+          {
+            echo '# Experimental generic-GKI DWARF structure layouts (NOT TARGET ABI)'
+            echo 'The source is an experimental KernelSU 32680 module compiled against a generic GKI DDK.'
+            echo 'Compare only when fields are present on both sides; do not interpret missing types as zero offsets.'
+            echo
+            if command -v pahole >/dev/null 2>&1; then
+              for type in task_struct cred mm_struct file files_struct linux_binprm module; do
+                echo "===== STRUCT ${type} ====="
+                if ! pahole -C "${type}" kernelsu.ko 2>&1; then
+                  echo "UNAVAILABLE: ${type} is not present in this module's DWARF"
+                fi
+                echo
+              done
+            else
+              echo 'PAHOLE_UNAVAILABLE: cannot produce field-offset layout report'
+              if command -v llvm-dwarfdump >/dev/null 2>&1; then
+                for type in task_struct cred mm_struct file files_struct linux_binprm module; do
+                  echo "===== DWARF NAME ${type} ====="
+                  llvm-dwarfdump --name="${type}" kernelsu.ko 2>&1 || true
+                done
+              fi
+            fi
+          } > ../../abi-audit/TYPE_LAYOUTS.txt
           # Deliberately do not copy or upload kernelsu.ko.
       - name: Upload metadata and blockers only
         if: always()
