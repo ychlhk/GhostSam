@@ -44,7 +44,7 @@ jobs:
         run: |
           set -euo pipefail
           cd ksu/kernel
-          CONFIG_KSU=m CONFIG_KSU_SAMSUNG_KDP=y CONFIG_KSU_SAMSUNG_DEFEX=y CC=clang make
+          CONFIG_KSU=m CONFIG_KSU_SAMSUNG_KDP=y CONFIG_KSU_SAMSUNG_DEFEX=y CC=clang KCFLAGS='-g' make
           test -s kernelsu.ko
           mkdir -p ../../abi-audit
           {
@@ -77,11 +77,11 @@ jobs:
             echo '## Symbol version section presence'
             readelf -S kernelsu.ko | grep -E '__versions|__version_ext|\.modinfo' || true
             echo
-            echo '## Debug/type metadata capabilities'
-            readelf -S -W kernelsu.ko | grep -E '\\.(BTF|debug_info|debug_abbrev|debug_str)|__versions|__version_ext' || true
+            echo '## Debug/type metadata capabilities (KCFLAGS=-g)'
+            readelf -S -W kernelsu.ko | grep -E '(BTF|debug_info|debug_abbrev|debug_str|__versions|__version_ext)' || true
             echo
             echo '## Compiler-visible structure type diagnostics'
-            if readelf -S -W kernelsu.ko | grep -qE '\\.debug_info|\\.BTF'; then
+            if readelf -S -W kernelsu.ko | grep -qE '(debug_info|BTF)'; then
               echo 'Type debug section detected. A matching generic reference build still does not establish device layout parity.'
               if command -v llvm-dwarfdump >/dev/null 2>&1; then
                 llvm-dwarfdump --statistics kernelsu.ko 2>&1 || true
